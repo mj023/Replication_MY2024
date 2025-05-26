@@ -1290,8 +1290,8 @@ packages:
   timestamp: 1739569648873
 - pypi: .
   name: econ-rl
-  version: 0.1.dev1+g320a092
-  sha256: a6d9c1773e99139bbbba9898ef184e3df04a7baad9dd002526d3a36456619941
+  version: 0.1.dev4+g92f4d3c.d20250524
+  sha256: 3e9f92cda85a1d59c0eab6beea5fd373fd61460932ed87b6f1a93c75e5bab82a
   requires_dist:
   - dags
   - distrax>=0.1.5,<0.2
@@ -1299,7 +1299,7 @@ packages:
   - gymnax>=0.0.8,<0.0.9
   - nlopt>=2.7.1,<3
   - numpy
-  - nvtx>=0.2.10,<0.3
+  - nvtx>=0.2.11,<0.3
   - pandas
   requires_python: '>=3.12'
   editable: true

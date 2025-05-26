@@ -22,13 +22,10 @@ def rouwenhorst(rho,sigma_eps,n):
         P22 = jnp.zeros((i+1,i+1))
 
         P11= P11.at[0:i,0:i].set(P[0:i,0:i])
-        print(P11)
         P12 = P12.at[0:i,1:i+1].set(P[0:i,0:i])
         P21 = P21.at[1:i+1,0:i].set(P[0:i,0:i])
         P22 = P22.at[1:i+1,1:i+1].set(P[0:i,0:i])
 
         P=P.at[0:i+1,0:i+1].set(q*P11 + (1-q)*P12 + (1-q)*P21 + q*P22)
         P = P.at[1:i,:].set(P[1:i,:]/2)
-    return jnp.linspace(mu_eps/(1.0-rho)-nu,mu_eps/(1.0-rho)+nu,n), P
-
-print(rouwenhorst(0.8, 0.5, 4))
+    return jnp.linspace(mu_eps/(1.0-rho)-nu,mu_eps/(1.0-rho)+nu,n), P.T

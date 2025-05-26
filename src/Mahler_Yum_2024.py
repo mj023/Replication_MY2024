@@ -117,23 +117,21 @@ with nvtx.annotate("grids", color = "green"):
         spgrid = spgrid.at[:,0,i].set(surv_HS[:,i])
         spgrid = spgrid.at[:,1,i].set(surv_CL[:,i])
     # period, health, effort, effort_t-1, education, health_type
-    eff_grid = np.linspace(0,1,40).astype(int).tolist()
+    eff_grid = np.linspace(0,1,40).astype(float).tolist()
     tr2yp_grid = jnp.zeros((2,38,40,40,2,2,2))
     j = jnp.floor_divide(jnp.arange(38), 5)
 
     for health in range(2):
-        for eff in eff_grid:
-            for eff_1 in eff_grid:
+        for eff in range(40):
+            for eff_1 in range(40):
                 for edu in range(2):
                     for ht in range(2):
-                        y = const_healthtr + age_const[j] + edu*college_dummy + health*healthy_dummy + ht*htype_dummy + eff*eff_param[1] + eff_1*eff_param[2] + eff**2 * eff_sq
+                        y = const_healthtr + age_const[j] + edu*college_dummy + health*healthy_dummy + ht*htype_dummy + eff_grid[eff]*eff_param[1] + eff_grid[eff_1]*eff_param[2] + eff**2 * eff_sq
                         tr2yp = jnp.exp(y) / (1.0 + jnp.exp(y))
-                        tr2yp_grid = tr2yp_grid.at[health,:,eff,eff_1,edu,ht,1].set(y)
+                        tr2yp_grid = tr2yp_grid.at[health,:,eff,eff_1,edu,ht,1].set(tr2yp)
     
-    tr2yp_grid = tr2yp_grid.at[:,:,:,:,:,:,0].set(1 - tr2yp_grid[:,:,:,:,:,:,1])
-
-
-
+    tr2yp_grid = tr2yp_grid.at[:,:,:,:,:,:,0].set(1.0 - tr2yp_grid[:,:,:,:,:,:,1])
+    print(tr2yp_grid)
 
         
 # ======================================================================================
@@ -148,7 +146,7 @@ def utility(_period, lagged_health, wealth, saving,working,health,education,adju
     cnow = jnp.maximum( net_income + wealth*r - saving, mincon)
     mucon = jnp.where(health, 1, kappa)
     f = mucon*((cnow)**(1.0-sigma))/(1.0-sigma) + mucon*bb - disutil - xigrid[_period,education,health]*fcost- adj_cost   
-    return f * spgrid[_period,lagged_health,education]
+    return -f * spgrid[_period,lagged_health,education]
 def disutil(working, health,education, _period, phigrid):
     return phigrid[_period,education,health] * ((working/2)**(2))/2
 def fcost(effort, psi):
@@ -161,7 +159,7 @@ def net_income(working, taxed_income, _period, health, pension):
     return taxed_income + jnp.where(_period >= retirement_age-1, pension,jnp.where(jnp.logical_and(health == 0, working == 0), tt0*avrgearn,0))
 def income(working, _period, education, health, productivity, y1_HS,y1_CL,ytHS_s,ytHS_sq,wagep_HS,wagep_CL,ytCL_s,ytCL_sq, sigx):
     sdztemp = ((sigx**2.0)/(1.0-rho**2.0))**0.5
-    yt = jnp.where(education==1, (y1_CL*jnp.exp( ytCL_s*(_period-1.0) + ytCL_sq*(_period-1.0)**2.0 ))*(1.0-wagep_CL*(1-health)),(y1_HS*jnp.exp( ytHS_s*(_period-1.0) + ytHS_sq*(_period-1.0)**2.0 ))*(1.0-wagep_HS*(1-health)))
+    yt = jnp.where(education==1, (y1_CL*jnp.exp( ytCL_s*(_period+1.0) + ytCL_sq*(_period+1.0)**2.0 ))*(1.0-wagep_CL*(1-health)),(y1_HS*jnp.exp( ytHS_s*(_period+1.0) + ytHS_sq*(_period+1.0)**2.0 ))*(1.0-wagep_HS*(1-health)))
     return (working/2)*(yt/(jnp.exp( ((jnp.log(theta_val[1])**2.0)**2.0)/2.0 )*jnp.exp( ((sdztemp**2.0)**2.0)/2.0)))*theta_val[productivity]       
 def taxed_income(income, productivity_shock, sigma_eps):
     nu = (jnp.sqrt(n-1)/(1-rho**2)) * sigma_eps

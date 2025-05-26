@@ -100,7 +100,7 @@ with nvtx.annotate("grids", color = "green"):
                 temp_grid = jnp.arange(1,31)
                 temp_grid = jnp.interp(temp_grid,xi_interp_values, xi[i][j])
                 xigrid = xigrid.at[0:30,i,j].set(temp_grid)
-                xigrid = xigrid.at[30:retirement_age,i,j].set(xi[i][j][3])
+                xigrid = xigrid.at[30:n,i,j].set(xi[i][j][3])
         return xigrid
     def create_chimaxgrid(chi_1,chi_2, chi_3):
         t = jnp.arange(1,39)
@@ -115,7 +115,7 @@ with nvtx.annotate("grids", color = "green"):
         spgrid = spgrid.at[:,0,i].set(surv_HS[:,i])
         spgrid = spgrid.at[:,1,i].set(surv_CL[:,i])
     # period, health, effort, effort_t-1, education, health_type
-    eff_grid = np.linspace(0,1,40).astype(float).tolist()
+    eff_grid = jnp.linspace(0,1,40)
     tr2yp_grid = jnp.zeros((2,38,40,40,2,2,2))
     j = jnp.floor_divide(jnp.arange(38), 5)
 
@@ -129,7 +129,6 @@ with nvtx.annotate("grids", color = "green"):
                         tr2yp_grid = tr2yp_grid.at[health,:,eff,eff_1,edu,ht,1].set(tr2yp)
     
     tr2yp_grid = tr2yp_grid.at[:,:,:,:,:,:,0].set(1.0 - tr2yp_grid[:,:,:,:,:,:,1])
-    print(tr2yp_grid)
 
         
 # ======================================================================================
@@ -141,14 +140,14 @@ with nvtx.annotate("grids", color = "green"):
 # --------------------------------------------------------------------------------------
 def utility(_period, lagged_health, wealth, saving,working,health,education,adjustment_cost,  effort, effort_t_1, health_type, fcost,disutil,net_income, xigrid, sigma, bb, kappa, chimaxgrid):
     adj_cost = jnp.where(jnp.logical_not(effort == effort_t_1), adjustment_cost*(chimaxgrid[_period]/100), 0)
-    cnow = jnp.maximum( net_income + wealth*r - saving, mincon)
+    cnow = net_income + wealth*r - saving
     mucon = jnp.where(health, 1, kappa)
     f = mucon*((cnow)**(1.0-sigma))/(1.0-sigma) + mucon*bb - disutil - xigrid[_period,education,health]*fcost- adj_cost   
     return -f * spgrid[_period,lagged_health,education]
 def disutil(working, health,education, _period, phigrid):
     return phigrid[_period,education,health] * ((working/2)**(2))/2
 def fcost(effort, psi):
-    return (effort[eff_grid]**(1.0+(1.0/psi)))/(1.0+(1.0/psi))
+    return (eff_grid[effort]**(1.0+(1.0/psi)))/(1.0+(1.0/psi))
 
 # --------------------------------------------------------------------------------------
 # Income Calculation
@@ -213,7 +212,7 @@ def savings_constraint(net_income, wealth, saving):
 
 
 MODEL_CONFIG = Model(
-    n_periods=2,
+    n_periods=3,
     functions={
         "utility": utility,
         "disutil" : disutil,

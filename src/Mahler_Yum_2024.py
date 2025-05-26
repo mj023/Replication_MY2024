@@ -19,14 +19,12 @@ retirement_age = 21
 taul = 0.128     
 lamda = 1.0 - 0.321
 rho = 0.975
-mincon0 = 0.10
 r = 1.04**2.0
 tt0 = 0.115
 winit = jnp.array([43978,48201])
 avrgearn = avrgearn/winit[1]
 mincon0 = 0.10
 mincon = mincon0 * avrgearn
-effort_values = np.linspace(0,1,40)
 
 # --------------------------------------------------------------------------------------
 # Health Techonology
@@ -142,7 +140,7 @@ with nvtx.annotate("grids", color = "green"):
 # Utility function
 # --------------------------------------------------------------------------------------
 def utility(_period, lagged_health, wealth, saving,working,health,education,adjustment_cost,  effort, effort_t_1, health_type, fcost,disutil,net_income, xigrid, sigma, bb, kappa, chimaxgrid):
-    adj_cost = jnp.where(jnp.logical_not(effort == effort_t_1), adjustment_cost*(chimaxgrid[_period]/200), 0)
+    adj_cost = jnp.where(jnp.logical_not(effort == effort_t_1), adjustment_cost*(chimaxgrid[_period]/100), 0)
     cnow = jnp.maximum( net_income + wealth*r - saving, mincon)
     mucon = jnp.where(health, 1, kappa)
     f = mucon*((cnow)**(1.0-sigma))/(1.0-sigma) + mucon*bb - disutil - xigrid[_period,education,health]*fcost- adj_cost   
@@ -150,7 +148,7 @@ def utility(_period, lagged_health, wealth, saving,working,health,education,adju
 def disutil(working, health,education, _period, phigrid):
     return phigrid[_period,education,health] * ((working/2)**(2))/2
 def fcost(effort, psi):
-    return (effort**(1.0+(1.0/psi)))/(1.0+(1.0/psi))
+    return (effort[eff_grid]**(1.0+(1.0/psi)))/(1.0+(1.0/psi))
 
 # --------------------------------------------------------------------------------------
 # Income Calculation
@@ -207,7 +205,7 @@ def next_productivity_shock(productivity_shock):
 def retirement_constraint(_period, working):
     return jnp.logical_not(jnp.logical_and(_period >= 21, working > 0))
 def savings_constraint(net_income, wealth, saving):
-    return saving <= net_income + wealth*r
+    return mincon <= net_income + wealth*r - saving
 
 # ======================================================================================
 # Model specification and parameters

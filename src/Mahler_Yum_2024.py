@@ -165,10 +165,8 @@ def net_income(working, taxed_income, _period, health, pension):
     return taxed_income + jnp.where(_period >= retirement_age-1, pension,jnp.where(jnp.logical_and(health == 0, working == 0), tt0*avrgearn,0))
 def income(working, _period, health, education, productivity, income_grid):
     return income_grid[working, _period, health, education, productivity]
-def taxed_income(income, productivity_shock, sigma_eps):
-    nu = (jnp.sqrt(5-1)/(1-rho**2)) * sigma_eps
-    prod = jnp.exp(jnp.linspace(-nu,nu,5)[productivity_shock])
-    return income*prod - lamda*(income**(1.0-taul))*(avrgearn**taul)
+def taxed_income(income, productivity_shock, xvalues):
+    return income*xvalues[productivity_shock] - lamda*(income**(1.0-taul))*(avrgearn**taul)
 def pension(education,productivity, income_grid, penre):
     return income_grid[2,20,0,education,productivity]*penre
 

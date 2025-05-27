@@ -130,7 +130,6 @@ with nvtx.annotate("grids", color = "green"):
     
     tr2yp_grid = tr2yp_grid.at[:,:,:,:,:,:,0].set(1.0 - tr2yp_grid[:,:,:,:,:,:,1])
 
-        
 # ======================================================================================
 # Model functions
 # ======================================================================================
@@ -140,10 +139,10 @@ with nvtx.annotate("grids", color = "green"):
 # --------------------------------------------------------------------------------------
 def utility(_period, lagged_health, wealth, saving,working,health,education,adjustment_cost,  effort, effort_t_1, health_type, fcost,disutil,net_income, xigrid, sigma, bb, kappa, chimaxgrid):
     adj_cost = jnp.where(jnp.logical_not(effort == effort_t_1), adjustment_cost*(chimaxgrid[_period]/100), 0)
-    cnow = net_income + wealth*r - saving
+    cnow = jnp.maximum(net_income + wealth*r - saving, mincon)
     mucon = jnp.where(health, 1, kappa)
     f = mucon*((cnow)**(1.0-sigma))/(1.0-sigma) + mucon*bb - disutil - xigrid[_period,education,health]*fcost- adj_cost   
-    return -f * spgrid[_period,lagged_health,education]
+    return -f * spgrid[_period,education,lagged_health]
 def disutil(working, health,education, _period, phigrid):
     return phigrid[_period,education,health] * ((working/2)**(2))/2
 def fcost(effort, psi):
@@ -160,7 +159,7 @@ def income(working, _period, education, health, productivity, y1_HS,y1_CL,ytHS_s
     return (working/2)*(yt/(jnp.exp( ((jnp.log(theta_val[1])**2.0)**2.0)/2.0 )*jnp.exp( ((sdztemp**2.0)**2.0)/2.0)))*theta_val[productivity]       
 def taxed_income(income, productivity_shock, sigma_eps):
     nu = (jnp.sqrt(n-1)/(1-rho**2)) * sigma_eps
-    prod = jnp.linspace(-nu,nu,5)[productivity_shock]
+    prod = jnp.exp(jnp.linspace(-nu,nu,5)[productivity_shock])
     return income*prod - lamda*(income**(1.0-taul))*(avrgearn**taul)
 def pension(education,productivity, y1_HS,y1_CL,ytHS_s,ytHS_sq,wagep_HS,wagep_CL,ytCL_s,ytCL_sq, sigx, penre):
     return income(2,20,education,0,productivity,y1_HS,y1_CL,ytHS_s,ytHS_sq,wagep_HS,wagep_CL,ytCL_s,ytCL_sq, sigx)*penre

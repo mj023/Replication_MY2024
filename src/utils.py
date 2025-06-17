@@ -7,7 +7,7 @@ def rouwenhorst(rho,sigma_eps,n):
     mu_eps = 0
 
     q = (rho+1)/2
-    nu = (jnp.sqrt(n-1)/(1-rho**2)) * sigma_eps
+    nu = jnp.sqrt((n-1)/(1-rho**2)) * sigma_eps
     P = jnp.zeros((n,n))
 
     P = P.at[0,0].set(q)

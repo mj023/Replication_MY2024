@@ -8,7 +8,7 @@ import numpy as np
 from lcm import DiscreteGrid, Model, LinspaceGrid
 import lcm
 import nvtx
-import jax
+
 from lcm.dispatchers import _base_productmap
 # --------------------------------------------------------------------------------------
 # Fixed Parameters
@@ -26,6 +26,15 @@ winit = jnp.array([43978,48201])
 avrgearn = avrgearn/winit[1]
 mincon0 = 0.10
 mincon = mincon0 * avrgearn
+
+def calc_savingsgrid(x):
+    x = ((jnp.log(10.0**2)-jnp.log(10.0**0))/50)*x
+    x = jnp.exp(x)
+    xgrid = x - 10.0**(0.0)
+    xgrid = xgrid/(10.0**2 - 10.0**0.0)
+    xgrid = xgrid*(30-0) + 0 
+    return xgrid
+
 
 # --------------------------------------------------------------------------------------
 # Health Techonology
@@ -50,9 +59,9 @@ class EducationStatus:
     low: int = 0
     high: int = 1
 
-AdjustmentCost = make_dataclass('AdjustmentCost', [("class" + str(i), int, int(i)) for i in range(100)])
+AdjustmentCost = make_dataclass('AdjustmentCost', [("class" + str(i), int, int(i)) for i in range(10)])
 Effort = make_dataclass('HealthEffort', [("class" + str(i), int, int(i)) for i in range(40)])
-
+Savings = make_dataclass('Savings', [("class" + str(i), int, int(i)) for i in range(50)])
 @dataclass
 class DiscountFactor:
     low: int = 0
@@ -82,44 +91,6 @@ with nvtx.annotate("grids", color = "green"):
     # --------------------------------------------------------------------------------------
     # Grid Creation
     # --------------------------------------------------------------------------------------
-    phi_interp_values = jnp.array([1,8,13,20])
-    def create_phigrid(nu,nu_e):
-        phigrid = jnp.zeros((retirement_age-1, 2,2))
-        for i in range(2):
-            for j in range(2):
-                temp_grid = jnp.arange(1,retirement_age)
-                temp_grid = jnp.interp(temp_grid,phi_interp_values, nu[j])
-                temp_grid = jnp.where(i == 0, temp_grid*nu_e, temp_grid)
-                phigrid = phigrid.at[...,i,j].set(temp_grid)
-        return phigrid
-
-    xi_interp_values = jnp.array([1,12,20,31])
-    def create_xigrid(xi):
-        xigrid = jnp.zeros((n, 2,2))
-        for i in range(2):
-            for j in range(2):
-                temp_grid = jnp.arange(1,31)
-                temp_grid = jnp.interp(temp_grid,xi_interp_values, xi[i][j])
-                xigrid = xigrid.at[0:30,i,j].set(temp_grid)
-                xigrid = xigrid.at[30:n,i,j].set(xi[i][j][3])
-        return xigrid
-    def create_chimaxgrid(chi_1,chi_2, chi_3):
-        t = jnp.arange(1,39)
-        chimax = jnp.maximum(chi_1*jnp.exp(chi_2*(t)-1.0) + chi_3*((t)-1.0)**2.0,0)
-        return chimax
-    def create_income_grid(y1_HS,y1_CL,ytHS_s,ytHS_sq,wagep_HS,wagep_CL,ytCL_s,ytCL_sq, sigx):
-        sdztemp = ((sigx**2.0)/(1.0-rho**2.0))**0.5
-        j = jnp.arange(38)
-        health = jnp.arange(2)
-        working = jnp.arange(3)
-        education = jnp.arange(2)
-        productivity = jnp.arange(2)
-        def calc_base(working, _period, health, education, productivity):
-            yt = jnp.where(education==1, (y1_CL*jnp.exp( ytCL_s*(_period+1.0) + ytCL_sq*(_period+1.0)**2.0 ))*(1.0-wagep_CL*(1-health)),(y1_HS*jnp.exp( ytHS_s*(_period+1.0) + ytHS_sq*(_period+1.0)**2.0 ))*(1.0-wagep_HS*(1-health)))
-            return (working/2)*(yt/(jnp.exp( ((jnp.log(theta_val[1])**2.0)**2.0)/2.0 )*jnp.exp( ((sdztemp**2.0)**2.0)/2.0)))*theta_val[productivity]
-        mapped = _base_productmap(calc_base, ("working", "_period", "health", "education", "productivity"))
-        return mapped(working,j,health,education,productivity)
-    
     surv_HS = jnp.array(np.loadtxt("surv_HS.txt"))
     surv_CL = jnp.array(np.loadtxt("surv_CL.txt"))
 
@@ -127,19 +98,7 @@ with nvtx.annotate("grids", color = "green"):
     for i in range(2):
         spgrid = spgrid.at[:,0,i].set(surv_HS[:,i])
         spgrid = spgrid.at[:,1,i].set(surv_CL[:,i])
-    # period, health, effort, effort_t-1, education, health_type
     eff_grid = jnp.linspace(0,1,40)
-    tr2yp_grid = jnp.zeros((2,38,40,40,2,2,2))
-    j = jnp.floor_divide(jnp.arange(38), 5)
-
-    def health_trans(health,period,eff,eff_1,edu,ht):
-        y = const_healthtr + age_const[period] + edu*college_dummy + health*healthy_dummy + ht*htype_dummy + eff_grid[eff]*eff_param[1] + eff_grid[eff_1]*eff_param[2] + eff**2 * eff_sq
-        return jnp.exp(y) / (1.0 + jnp.exp(y))
-    mapped_health_trans = _base_productmap(health_trans, ("health","period","eff","eff_1","edu","ht"))
-    
-    tr2yp_grid = tr2yp_grid.at[:,:,:,:,:,:,1].set(mapped_health_trans(jnp.arange(2),j, jnp.arange(40),jnp.arange(40),jnp.arange(2),jnp.arange(2)))
-    tr2yp_grid = tr2yp_grid.at[:,:,:,:,:,:,0].set(1.0 - tr2yp_grid[:,:,:,:,:,:,1])
-    print(tr2yp_grid)
 # ======================================================================================
 # Model functions
 # ======================================================================================
@@ -147,14 +106,19 @@ with nvtx.annotate("grids", color = "green"):
 # --------------------------------------------------------------------------------------
 # Utility function
 # --------------------------------------------------------------------------------------
-def utility(_period, lagged_health, wealth, saving,working,health,education,adjustment_cost,  effort, effort_t_1, health_type, fcost,disutil,net_income, xigrid, sigma, bb, kappa, chimaxgrid):
-    adj_cost = jnp.where(jnp.logical_not(effort == effort_t_1), adjustment_cost*(chimaxgrid[_period]/100), 0)
-    cnow = jnp.maximum(net_income + wealth*r - saving, mincon)
-    mucon = jnp.where(health, 1, kappa)
-    f = mucon*((cnow)**(1.0-sigma))/(1.0-sigma) + mucon*bb - disutil - xigrid[_period,education,health]*fcost- adj_cost   
-    return f * spgrid[_period,education,lagged_health]
+def utility(_period, lagged_health, wealth, saving,working,health,education,adjustment_cost,  effort, effort_t_1, health_type, fcost,disutil,net_income,cons_util, xigrid, sigma, bb, kappa, chimaxgrid, discount_factor, beta_mean, beta_std):
+    adj_cost = jnp.where(jnp.logical_not(effort == effort_t_1), adjustment_cost*(chimaxgrid[_period]/10), 0)
+    beta = beta_mean + jnp.where(discount_factor, -beta_std, beta_std)
+    f = cons_util - disutil - xigrid[_period,education,health]*fcost- adj_cost   
+    return f * spgrid[_period,education,lagged_health]*(beta**_period)
 def disutil(working, health,education, _period, phigrid):
     return phigrid[_period,education,health] * ((working/2)**(2))/2
+def cons_util(net_income, wealth, saving, health, kappa, sigma, bb):
+    wealth = calc_savingsgrid(wealth)
+    saving = calc_savingsgrid(saving)
+    cnow = jnp.maximum(net_income + (wealth)*r - (saving), mincon)
+    mucon = jnp.where(health, 1, kappa)
+    return mucon*((cnow)**(1.0-sigma))/(1.0-sigma) + mucon*bb
 def fcost(effort, psi):
     return (eff_grid[effort]**(1.0+(1.0/psi)))/(1.0+(1.0/psi))
 
@@ -162,13 +126,14 @@ def fcost(effort, psi):
 # Income Calculation
 # --------------------------------------------------------------------------------------
 def net_income(working, taxed_income, _period, health, pension):
-    return taxed_income + jnp.where(_period >= retirement_age-1, pension,jnp.where(jnp.logical_and(health == 0, working == 0), tt0*avrgearn,0))
-def income(working, _period, health, education, productivity, income_grid):
-    return income_grid[working, _period, health, education, productivity]
+    return taxed_income + jnp.where(_period > retirement_age, pension,jnp.where(jnp.logical_and(health == 0, working == 0), tt0*avrgearn,0))
+def income( _period, health, education, income_grid):
+    return income_grid[ _period, health, education]
 def taxed_income(income, productivity_shock, xvalues):
-    return income*xvalues[productivity_shock] - lamda*(income**(1.0-taul))*(avrgearn**taul)
+    income = income*jnp.exp(xvalues[productivity_shock])
+    return income - lamda*(income**(1.0-taul))*(avrgearn**taul)
 def pension(education,productivity, income_grid, penre):
-    return income_grid[2,20,0,education,productivity]*penre
+    return income_grid[2,20,1,education,productivity]*penre
 
 
 
@@ -207,9 +172,11 @@ def next_productivity_shock(productivity_shock):
 # Constraints
 # --------------------------------------------------------------------------------------
 def retirement_constraint(_period, working):
-    return jnp.logical_not(jnp.logical_and(_period >= 21, working > 0))
+    return jnp.logical_not(jnp.logical_and(_period > 21, working > 0))
 def savings_constraint(net_income, wealth, saving):
-    return mincon <= net_income + wealth*r - saving
+    wealth = calc_savingsgrid(wealth)
+    saving = calc_savingsgrid(saving)
+    return  net_income + (wealth)*r >= (saving)
 
 # ======================================================================================
 # Model specification and parameters
@@ -217,21 +184,22 @@ def savings_constraint(net_income, wealth, saving):
 
 
 MODEL_CONFIG = Model(
-    n_periods=3,
+    n_periods=38,
     functions={
         "utility": utility,
         "disutil" : disutil,
         "fcost": fcost,
+        "cons_util": cons_util,
         "next_wealth": next_wealth,
         "next_health": next_health,
         "next_productivity_shock" : next_productivity_shock,
         "next_discount_factor": next_discount_factor,
         "next_adjustment_cost": next_adjustment_cost,
-        "next_education": next_education,
         "next_effort_t_1": next_effort_t_1,
-        "next_productivity": next_productivity,
         "next_lagged_health": next_lagged_health,
         "next_health_type": next_health_type,
+        "next_education": next_education,
+        "next_productivity": next_productivity,
         "income": income,
         "net_income": net_income,
         "taxed_income" : taxed_income,
@@ -241,27 +209,19 @@ MODEL_CONFIG = Model(
     },
     actions={
         "working": DiscreteGrid(WorkingStatus),
-        "saving": LinspaceGrid(
-            start=0,
-            stop=30.0,
-            n_points=50,
-        ),
+        "saving": LinspaceGrid(start=0,stop=49,n_points=50),
         "effort": DiscreteGrid(Effort),
     },
     states={
-        "wealth": LinspaceGrid(
-            start=0,
-            stop=30.0,
-            n_points=50,
-        ),
+        "wealth": LinspaceGrid(start=0,stop=49,n_points=50),
         "health": DiscreteGrid(Health),
         "lagged_health": DiscreteGrid(Health),
-        "productivity": DiscreteGrid(ProductivityType),
         "productivity_shock": DiscreteGrid(ProductivityShock),
-        "education": DiscreteGrid(EducationStatus),
-        #"discount_factor": DiscreteGrid(DiscountFactor),
         "effort_t_1": DiscreteGrid(Effort),
         "adjustment_cost": DiscreteGrid(AdjustmentCost),
+        "education": DiscreteGrid(EducationStatus),
+        "discount_factor": DiscreteGrid(DiscountFactor),
+        "productivity": DiscreteGrid(ProductivityType),
         "health_type": DiscreteGrid(HealthType),
 
     },
@@ -371,22 +331,3 @@ haddft = 0.0
         
 sdxi= 0.0
 chi_3 = 0.0 
-xvalues, xtrans = rouwenhorst(rho, jnp.sqrt(sigx), 5)
-income_grid = create_income_grid(y1_HS,y1_CL,ytHS_s,ytHS_sq,wagep_HS,wagep_CL,ytCL_s,ytCL_sq, sigx)
-
-PARAMS = {
-    "beta": 1,
-    "disutil": {"phigrid": create_phigrid(nu, nuad)},
-    "fcost" : {"psi": psi},
-    "utility": {"xigrid": create_xigrid(xi), "sigma": sigma, "bb": bb, "kappa" : conp, "chimaxgrid": create_chimaxgrid(chi_1,chi_2,chi_3)},
-    "income": {"income_grid": income_grid},
-    "pension": {"income_grid": income_grid, "penre":penre},
-    "taxed_income": {"xvalues" : xvalues},
-    "shocks" : {
-        "productivity_shock": xtrans,
-        "health": tr2yp_grid,
-        "adjustment_cost": jnp.full((100, 100), 1/100)
-
-    }
-}
-

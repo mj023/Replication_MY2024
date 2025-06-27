@@ -32,17 +32,6 @@ def calc_savingsgrid(x):
     xgrid = xgrid/(10.0**2 - 10.0**0.0)
     xgrid = xgrid*(30-0) + 0 
     return xgrid
-
-# --------------------------------------------------------------------------------------
-# Health Techonology
-# --------------------------------------------------------------------------------------
-const_healthtr = -0.906
-age_const = jnp.asarray([0.0,-0.289,-0.644,-0.881,-1.138,-1.586,-1.586,-1.586])
-eff_param = jnp.asarray([0.693,0.734])            
-eff_sq = 0
-healthy_dummy = 2.311
-htype_dummy = 0.632
-college_dummy = 0.238
 # --------------------------------------------------------------------------------------
 # Categorical variables
 # --------------------------------------------------------------------------------------
@@ -56,9 +45,8 @@ class EducationStatus:
     low: int = 0
     high: int = 1
 
-AdjustmentCost = make_dataclass('AdjustmentCost', [("class" + str(i), int, int(i)) for i in range(10)])
+AdjustmentCost = make_dataclass('AdjustmentCost', [("class" + str(i), int, int(i)) for i in range(5)])
 Effort = make_dataclass('HealthEffort', [("class" + str(i), int, int(i)) for i in range(40)])
-
 @dataclass
 class DiscountFactor:
     low: int = 0
@@ -68,6 +56,10 @@ class DiscountFactor:
 class Health:
     bad: int = 0
     good: int = 1
+@dataclass
+class Alive:
+    dead: int = 0
+    alive: int = 1
 
 @dataclass
 class ProductivityType:
@@ -84,19 +76,10 @@ class ProductivityShock:
     val2: int = 2
     val3: int = 3
     val4: int = 4
-with nvtx.annotate("grids", color = "green"):
     # --------------------------------------------------------------------------------------
     # Grid Creation
     # --------------------------------------------------------------------------------------
-    surv_HS = jnp.array(np.loadtxt("surv_HS.txt"))
-    surv_CL = jnp.array(np.loadtxt("surv_CL.txt"))
-    spgrid = jnp.zeros((39,2,2))
-    spgrid = spgrid.at[0,:,:].set(1)
-    spgrid = spgrid.at[1:,0,0].set(surv_HS[:,1])
-    spgrid = spgrid.at[1:,1,0].set(surv_CL[:,1])
-    spgrid = spgrid.at[1:,0,1].set(surv_HS[:,0])
-    spgrid = spgrid.at[1:,1,1].set(surv_CL[:,0])
-    eff_grid = jnp.linspace(0,1,40)
+eff_grid = jnp.linspace(0,1,40)
 # ======================================================================================
 # Model functions
 # ======================================================================================
@@ -104,14 +87,14 @@ with nvtx.annotate("grids", color = "green"):
 # --------------------------------------------------------------------------------------
 # Utility function
 # --------------------------------------------------------------------------------------
-def utility(_period, lagged_health,health_type,education,adj_cost, fcost,disutil,cons_util,discount_factor, beta_mean, beta_std):
+def utility(_period, alive,health_type,education,adj_cost, fcost,disutil,cons_util,discount_factor, beta_mean, beta_std):
     beta = beta_mean + jnp.where(discount_factor, beta_std, -beta_std)
     f = cons_util - disutil - fcost- adj_cost   
-    return f * spgrid[_period,education,lagged_health]*(beta**(_period))
+    return f * alive *(beta**(_period))
 def disutil(working, health,education, _period, phigrid):
     return phigrid[_period,education,health] * ((working/2)**(2))/2
 def adj_cost(_period,adjustment_cost, effort, effort_t_1, chimaxgrid):
-    cost = jnp.where(jnp.logical_not(effort == effort_t_1), adjustment_cost*(chimaxgrid[_period]/9), 0)
+    cost = jnp.where(jnp.logical_not(effort == effort_t_1), adjustment_cost*(chimaxgrid[_period]/4), 0)
     return cost
 def cnow(net_income, wealth, saving):
     wealth = calc_savingsgrid(wealth)
@@ -122,19 +105,22 @@ def cons_util( health,cnow, kappa, sigma, bb):
     mucon = jnp.where(health, 1, kappa)
     return mucon*(((cnow)**(1.0-sigma))/(1.0-sigma)) + mucon*bb
 def fcost(_period,education,health,effort, psi, xigrid):
-    return ((eff_grid[effort]**(1.0+(1.0/psi)))/(1.0+(1.0/psi))) * xigrid[_period,education,health]
+    return xigrid[_period,education,health] * (eff_grid[effort]**(1+(1/psi)))/(1+(1/psi))
 
 # --------------------------------------------------------------------------------------
 # Income Calculation
 # --------------------------------------------------------------------------------------
-def net_income(working, taxed_income, _period, health, pension):
-    return taxed_income + jnp.where(_period > retirement_age, pension,jnp.where(jnp.logical_and(health == 0, working == 0), tt0*avrgearn,0))
+def net_income(benefits, taxed_income, pension):
+    return taxed_income + pension + benefits
 def income(working, _period, health, education, productivity , productivity_shock, xvalues, income_grid):
     return income_grid[ _period, health, education]*(working/2)*theta_val[productivity]*jnp.exp(xvalues[productivity_shock])
 def taxed_income(income):
     return lamda*(income**(1.0-taul))*(avrgearn**taul)
-def pension(education,productivity, income_grid, penre):
-    return income_grid[19,1,education]*theta_val[productivity]*penre
+def benefits(_period,health, working):
+    eligible = jnp.logical_and(health == 0, working == 0)
+    return jnp.where(jnp.logical_and(eligible,_period <= retirement_age), tt0*avrgearn,0)
+def pension(_period,education,productivity, income_grid, penre):
+    return jnp.where(_period > retirement_age,income_grid[19,1,education]*theta_val[productivity]*penre, 0)
 
 
 
@@ -145,10 +131,11 @@ def next_wealth(saving):
     return saving
 def next_discount_factor(discount_factor):
     return discount_factor
-def next_lagged_health(health):
-    return health
 @lcm.mark.stochastic
-def next_health(health, _period, effort, effort_t_1, education, health_type):
+def next_alive(alive, _period, education, health):
+    pass
+@lcm.mark.stochastic
+def next_health(_period, health, effort, effort_t_1, education, health_type):
     pass
 def next_productivity(productivity):
     return productivity
@@ -193,11 +180,12 @@ MODEL_CONFIG = Model(
         "next_discount_factor": next_discount_factor,
         "next_adjustment_cost": next_adjustment_cost,
         "next_effort_t_1": next_effort_t_1,
-        "next_lagged_health": next_lagged_health,
+        "next_alive": next_alive,
         "next_health_type": next_health_type,
         "next_education": next_education,
         "next_productivity": next_productivity,
         "income": income,
+        "benefits": benefits,
         "adj_cost": adj_cost,
         "net_income": net_income,
         "taxed_income" : taxed_income,
@@ -211,9 +199,9 @@ MODEL_CONFIG = Model(
         "effort": DiscreteGrid(Effort),
     },
     states={
-        "wealth": LinspaceGrid(start=0,stop=49,n_points=50),
+        "wealth":  LinspaceGrid(start=0,stop=49,n_points=50),
         "health": DiscreteGrid(Health),
-        "lagged_health": DiscreteGrid(Health),
+        "alive": DiscreteGrid(Alive),
         "productivity_shock": DiscreteGrid(ProductivityShock),
         "effort_t_1": DiscreteGrid(Effort),
         "adjustment_cost": DiscreteGrid(AdjustmentCost),

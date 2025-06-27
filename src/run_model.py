@@ -11,11 +11,9 @@ def todotgraph(x):
 with nvtx.annotate("create", color = "blue"):
     solve , _ = get_lcm_function(model=MODEL_CONFIG,jit = True, targets="solve")
 
-res = solve.lower(PARAMS).compile().as_text()
-with open("t.dot", "w") as f:
-    f.write(todotgraph(res))
 
 print('Starting Solve.')
 
 with nvtx.annotate("run", color = "red"):
-    print(solve(PARAMS))
+    for i in range(2):
+        print(solve(PARAMS)[0])

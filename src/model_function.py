@@ -113,6 +113,7 @@ initial_dists = jnp.diff(init_distr_2b2t2h[:,0],prepend=0)
 
 solve_and_simulate , _ = get_lcm_function(model=MODEL_CONFIG,jit = True, targets="solve_and_simulate")
 solve , _ = get_lcm_function(model=MODEL_CONFIG,jit = True, targets="solve")
+simulate, _ = get_lcm_function(model=MODEL_CONFIG,jit = True, targets="simulate")
 
 surv_HS = jnp.array(np.loadtxt("surv_HS.txt"))
 surv_CL = jnp.array(np.loadtxt("surv_CL.txt"))
@@ -124,7 +125,7 @@ spgrid = spgrid.at[1,:,1,1,1].set(surv_CL[:,0])
 spgrid = spgrid.at[0,:,:,:,1].set(0)
 spgrid = spgrid.at[:,:,:,:,0].set(1-spgrid[:,:,:,:,1])
 
-def create_inputs(nuh_1, nuh_2, nuh_3, nuh_4,nuu_1, nuu_2, nuu_3, nuu_4,xiHSh_1,xiHSh_2,xiHSh_3,xiHSh_4,xiHSu_1,xiHSu_2,xiHSu_3,xiHSu_4,xiCLu_1,xiCLu_2,xiCLu_3,xiCLu_4,xiCLh_1,xiCLh_2,xiCLh_3,xiCLh_4,y1_HS,y1_CL,ytHS_s,ytHS_sq,wagep_HS,wagep_CL,ytCL_s,ytCL_sq, sigx, chi_1,chi_2, psi, nuad, bb, conp, penre, beta_mean, beta_std):
+def create_inputs(seed, nuh_1, nuh_2, nuh_3, nuh_4,nuu_1, nuu_2, nuu_3, nuu_4,xiHSh_1,xiHSh_2,xiHSh_3,xiHSh_4,xiHSu_1,xiHSu_2,xiHSu_3,xiHSu_4,xiCLu_1,xiCLu_2,xiCLu_3,xiCLu_4,xiCLh_1,xiCLh_2,xiCLh_3,xiCLh_4,y1_HS,y1_CL,ytHS_s,ytHS_sq,wagep_HS,wagep_CL,ytCL_s,ytCL_sq, sigx, chi_1,chi_2, psi, nuad, bb, conp, penre, beta_mean, beta_std):
     nuh = jnp.array([nuh_1, nuh_2, nuh_3, nuh_4])
     nuu = jnp.array([nuu_1, nuu_2, nuu_3, nuu_4])
     nu = [nuu, nuh]
@@ -167,8 +168,7 @@ def create_inputs(nuh_1, nuh_2, nuh_3, nuh_4,nuu_1, nuu_2, nuu_3, nuu_4,xiHSh_1,
         "adjustment_cost": jnp.full((5, 5), 1/5),
         "alive": spgrid
     }}
-    n = 1000
-    seed = 32
+    n = 2000
     eff_grid = jnp.linspace(0,1,40)
     key = random.key(seed)
     initial_wealth = jnp.full((n), 0, dtype=jnp.int8)
@@ -185,21 +185,27 @@ def create_inputs(nuh_1, nuh_2, nuh_3, nuh_4,nuu_1, nuu_2, nuu_3, nuu_4,xiHSh_1,
     initial_effort = jnp.searchsorted(eff_grid,init_distr_2b2t2h[:,2][types])
     initial_adjustment_cost = random.choice(new_keys[1], jnp.arange(10), (n,))
     initial_productivity_shock = random.choice(new_keys[2], jnp.arange(5), (n,), p = prod_dist)
-
-    initial_states = {"wealth": initial_wealth, "health": initial_health, "health_type": initial_health_type, "effort_t_1": initial_effort, 
-                      "productivity_shock": initial_productivity_shock, "adjustment_cost": initial_adjustment_cost,
-                      "education": initial_education, "alive":initial_alive, "productivity": initial_productivity, "discount_factor": initial_discount
-                      }
+    initial_states = []
+    for i in range(10):
+        initial_states.append({"wealth": initial_wealth[i*1000:((i+1)*1000)-1], "health": initial_health[i*1000:((i+1)*1000)-1], "health_type": initial_health_type[i*1000:((i+1)*1000)-1], "effort_t_1": initial_effort[i*1000:((i+1)*1000)-1], 
+                      "productivity_shock": initial_productivity_shock[i*1000:((i+1)*1000)-1], "adjustment_cost": initial_adjustment_cost[i*1000:((i+1)*1000)-1],
+                      "education": initial_education[i*1000:((i+1)*1000)-1], "alive":initial_alive[i*1000:((i+1)*1000)-1], "productivity": initial_productivity[i*1000:((i+1)*1000)-1], "discount_factor": initial_discount[i*1000:((i+1)*1000)-1]
+                      })
     return params, initial_states
 
 jitted_create_inputs = jax.jit(create_inputs)
 
 def model_solve_and_simulate(nuh_1, nuh_2, nuh_3, nuh_4,nuu_1, nuu_2, nuu_3, nuu_4,xiHSh_1,xiHSh_2,xiHSh_3,xiHSh_4,xiHSu_1,xiHSu_2,xiHSu_3,xiHSu_4,xiCLu_1,xiCLu_2,xiCLu_3,xiCLu_4,xiCLh_1,xiCLh_2,xiCLh_3,xiCLh_4,y1_HS,y1_CL,ytHS_s,ytHS_sq,wagep_HS,wagep_CL,ytCL_s,ytCL_sq, sigx, chi_1,chi_2, psi, nuad, bb, conp, penre, beta_mean, beta_std):
-    
-    params, initial_states = jitted_create_inputs(nuh_1, nuh_2, nuh_3, nuh_4,nuu_1, nuu_2, nuu_3, nuu_4,xiHSh_1,xiHSh_2,xiHSh_3,xiHSh_4,xiHSu_1,xiHSu_2,xiHSu_3,xiHSu_4,xiCLu_1,xiCLu_2,xiCLu_3,xiCLu_4,xiCLh_1,xiCLh_2,xiCLh_3,xiCLh_4,y1_HS,y1_CL,ytHS_s,ytHS_sq,wagep_HS,wagep_CL,ytCL_s,ytCL_sq, sigx, chi_1,chi_2, psi, nuad, bb, conp, penre, beta_mean, beta_std)
-    return solve_and_simulate(params=params,initial_states=initial_states,additional_targets=["utility","fcost","pension","income","cnow"])
-
+    seed = 32
+    params, initial_states = jitted_create_inputs(seed,nuh_1, nuh_2, nuh_3, nuh_4,nuu_1, nuu_2, nuu_3, nuu_4,xiHSh_1,xiHSh_2,xiHSh_3,xiHSh_4,xiHSu_1,xiHSu_2,xiHSu_3,xiHSu_4,xiCLu_1,xiCLu_2,xiCLu_3,xiCLu_4,xiCLh_1,xiCLh_2,xiCLh_3,xiCLh_4,y1_HS,y1_CL,ytHS_s,ytHS_sq,wagep_HS,wagep_CL,ytCL_s,ytCL_sq, sigx, chi_1,chi_2, psi, nuad, bb, conp, penre, beta_mean, beta_std)
+    vf_arr = solve(params)
+    frames = []
+    for i in range(10):
+        res = simulate(params=params,initial_states=initial_states[i],additional_targets=["utility","fcost","pension","income","cnow"], V_arr_dict= vf_arr)
+        frames.append(res)
+    return pd.concat(frames)
 def simulate_moments(params):
+
     res = model_solve_and_simulate(**params)
     moments = np.zeros(63)
     res['effort'] = np.asarray(eff_grid[res['effort'].to_numpy()])

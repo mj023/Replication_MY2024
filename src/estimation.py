@@ -142,8 +142,12 @@ empirical_moments = np.asarray([0.6508581,0.7660204,0.8232445,0.6193264,
 
 moments_cov = np.eye(63)
 
-algo = om.algos.scipy_neldermead(
-    stopping_maxfun=2,
+algo = om.algos.pounders(
+    stopping_maxiter=1,
+)
+log_opts = om.SQLiteLogOptions(
+    path= "optim.db",
+    if_database_exists='replace'
 )
 
 weights, internal_weights = get_weighting_matrix(
@@ -155,7 +159,7 @@ weights, internal_weights = get_weighting_matrix(
 
 criterion = get_msm_optimization_functions(simulate_moments=simulate_moments, empirical_moments=empirical_moments, weights=weights)['fun']
 
-res = om.minimize(criterion,start_params, algo,logging="optim.db", log_options={'if_table_exists':'replace'})
+res = om.minimize(criterion,start_params, algo,logging=log_opts)
 
 fig = om.criterion_plot(["optim.db"])
 fig.show()

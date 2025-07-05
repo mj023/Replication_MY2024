@@ -168,7 +168,7 @@ def create_inputs(seed, nuh_1, nuh_2, nuh_3, nuh_4,nuu_1, nuu_2, nuu_3, nuu_4,xi
         "adjustment_cost": jnp.full((5, 5), 1/5),
         "alive": spgrid
     }}
-    n = 2000
+    n = 4000
     eff_grid = jnp.linspace(0,1,40)
     key = random.key(seed)
     initial_wealth = jnp.full((n), 0, dtype=jnp.int8)
@@ -186,10 +186,10 @@ def create_inputs(seed, nuh_1, nuh_2, nuh_3, nuh_4,nuu_1, nuu_2, nuu_3, nuu_4,xi
     initial_adjustment_cost = random.choice(new_keys[1], jnp.arange(10), (n,))
     initial_productivity_shock = random.choice(new_keys[2], jnp.arange(5), (n,), p = prod_dist)
     initial_states = []
-    for i in range(10):
-        initial_states.append({"wealth": initial_wealth[i*1000:((i+1)*1000)-1], "health": initial_health[i*1000:((i+1)*1000)-1], "health_type": initial_health_type[i*1000:((i+1)*1000)-1], "effort_t_1": initial_effort[i*1000:((i+1)*1000)-1], 
-                      "productivity_shock": initial_productivity_shock[i*1000:((i+1)*1000)-1], "adjustment_cost": initial_adjustment_cost[i*1000:((i+1)*1000)-1],
-                      "education": initial_education[i*1000:((i+1)*1000)-1], "alive":initial_alive[i*1000:((i+1)*1000)-1], "productivity": initial_productivity[i*1000:((i+1)*1000)-1], "discount_factor": initial_discount[i*1000:((i+1)*1000)-1]
+    for i in range(2):
+        initial_states.append({"wealth": initial_wealth[i*2000:((i+1)*2000)-1], "health": initial_health[i*2000:((i+1)*2000)-1], "health_type": initial_health_type[i*2000:((i+1)*2000)-1], "effort_t_1": initial_effort[i*2000:((i+1)*2000)-1], 
+                      "productivity_shock": initial_productivity_shock[i*2000:((i+1)*2000)-1], "adjustment_cost": initial_adjustment_cost[i*2000:((i+1)*2000)-1],
+                      "education": initial_education[i*2000:((i+1)*2000)-1], "alive":initial_alive[i*2000:((i+1)*2000)-1], "productivity": initial_productivity[i*2000:((i+1)*2000)-1], "discount_factor": initial_discount[i*2000:((i+1)*2000)-1]
                       })
     return params, initial_states
 
@@ -200,7 +200,7 @@ def model_solve_and_simulate(nuh_1, nuh_2, nuh_3, nuh_4,nuu_1, nuu_2, nuu_3, nuu
     params, initial_states = jitted_create_inputs(seed,nuh_1, nuh_2, nuh_3, nuh_4,nuu_1, nuu_2, nuu_3, nuu_4,xiHSh_1,xiHSh_2,xiHSh_3,xiHSh_4,xiHSu_1,xiHSu_2,xiHSu_3,xiHSu_4,xiCLu_1,xiCLu_2,xiCLu_3,xiCLu_4,xiCLh_1,xiCLh_2,xiCLh_3,xiCLh_4,y1_HS,y1_CL,ytHS_s,ytHS_sq,wagep_HS,wagep_CL,ytCL_s,ytCL_sq, sigx, chi_1,chi_2, psi, nuad, bb, conp, penre, beta_mean, beta_std)
     vf_arr = solve(params)
     frames = []
-    for i in range(10):
+    for i in range(2):
         res = simulate(params=params,initial_states=initial_states[i],additional_targets=["utility","fcost","pension","income","cnow"], V_arr_dict= vf_arr)
         frames.append(res)
     return pd.concat(frames)

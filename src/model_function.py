@@ -238,5 +238,5 @@ def simulate_moments(params):
     avg_income = (res.loc[(res['alive'] == 1) & (res['_period'] < retirement_age + 1), 'income'].sum()/ res.loc[(res['alive'] == 1) & (res['_period'] < retirement_age+1), 'income'].count())
     moments[61] = (pension_sum/avg_income)
     moments[62] = gini(jnp.asarray(res.loc[res['alive']== 1, 'wealth'].to_numpy()))
-    return np.sum(moments)
+    return moments
 

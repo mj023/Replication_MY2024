@@ -128,11 +128,12 @@ empirical_moments = np.asarray([0.6508581,0.7660204,0.8232445,0.6193264,
         0.7517721,0.7435739,0.736526,0.7381558,0.750504,0.734436,     
         0.0619297,0.516081,1.165899,1.651459, 1.567324, 1.006182,     
         1.237489,             
-        0.2672905,0.3283083,0.4041793,                              
+        0.2672905,0.3283083,0.4041793, 
+        8.49264942390098,                             
         0.1610319,                         
         0.7456731,                         
         1.163207,                        
-                                                           
+
         35.39329, 49.37886, 55.95501, 42.21932,	 
         24.94774, 33.16593, 36.69067, 25.31111,   
         59.48338, 89.53806, 107.9282, 98.27698,   
@@ -140,27 +141,56 @@ empirical_moments = np.asarray([0.6508581,0.7660204,0.8232445,0.6193264,
         0.5952184,                           
         0.4770515 ])
 
-moments_cov = np.eye(63)
+moment_sd = np.asarray([0.0022079,0.001673,0.0015903,0.0024375,
+        0.0078668,0.0054486,0.0045718,0.0045788,      
+        0.0019615,0.0016137,0.0016517,0.0018318,0.0016836,0.0022494,
+        0.0066662,0.0047753,0.0035851,0.0031197,0.0027306,0.0025937,
+        0.0024741,0.0019636,0.0019423,0.0022411,0.0024561,0.0037815, 
+        0.0107689,0.0082543,0.0063126,0.0051546,0.0050761,0.0057938, 
+        0.0031501,0.0146831,0.023547,0.037393, 0.042682, 0.0473329,                   
+        0.0029621,      
+        0.0037247,0.0030799,0.0039969,            
+        0.594830904063775, 
+        0.0004399,                            
+        0.0035907,                        
+        0.0221391,                       
+                                                               
+        0.1955369, 0.2318309, 0.2660378, 0.3528976,	
+        0.5630693, 0.5187444, 0.4988166, 0.4986972, 
+        0.4875483, 0.631705, 0.7607303, 1.108492, 
+        1.848723, 1.65571, 1.688008, 1.78551,
+        0.0023382,                          
+        0.0015815 ])                     
 
+W = np.diag(1/moment_sd**2)
+W_root = np.linalg.cholesky(W)
 algo = om.algos.scipy_neldermead(
-    stopping_maxiter=1000
+    stopping_maxiter=1500
 )
 log_opts = om.SQLiteLogOptions(
     path= "optim.db",
     if_database_exists='replace'
 )
 
-weights, internal_weights = get_weighting_matrix(
-        moments_cov=moments_cov,
-        method="diagonal",
-        empirical_moments=empirical_moments,
-        return_type="pytree_and_array",
-    )
+def transform_params(params):
+    return {name:jnp.log(value + 0.1) for name,value in params.items()}
+def retransform_params(params):
+    return {name:jnp.exp(value)-0.1 for name,value in params.items()}
 
-criterion = get_msm_optimization_functions(simulate_moments=simulate_moments, empirical_moments=empirical_moments, weights=weights)['fun']
 
-res = om.minimize(criterion,start_params, algo,algo_options={'stopping.maxiter': 1}, logging=log_opts)
+def criterion_func(params):
+    sim_moments = simulate_moments(retransform_params(params))
+    e = (sim_moments - empirical_moments)/empirical_moments
+    g_theta = e.T @ W @ e
+    return g_theta
 
-fig = om.criterion_plot(["optim.db"])
-fig.show()
+@om.mark.least_squares
+def criterion_func(params):
+    sim_moments = simulate_moments(retransform_params(params))
+    e = (sim_moments - empirical_moments)/empirical_moments
+    residuals = e @ W_root
+    return residuals
+
+res = om.minimize(criterion_func,transform_params(start_params), algo, scaling=True, logging=log_opts)
+res.to_pickle('nm_full_model.pkl')
 

@@ -1,6 +1,7 @@
 import jax
 from jax import numpy as jnp
 import numpy as np
+import time
 import pandas as pd
 import optimagic as om
 from estimagic.estimate_msm import get_msm_optimization_functions
@@ -191,6 +192,20 @@ def criterion_func(params):
     residuals = e @ W_root
     return residuals
 
-res = om.minimize(criterion_func,transform_params(start_params), algo, scaling=True, logging=log_opts)
+
+lower_bounds = transform_params({"beta_mean": 0.9, "beta_std":0.005, "bb":8, "conp":0.7})
+upper_bounds = transform_params({"beta_mean": 0.96, "beta_std":0.04, "bb":16, "conp":0.99})
+bounds = om.Bounds(lower=lower_bounds, upper=upper_bounds)
+
+start_time = time.time()
+res = om.minimize(criterion_func,transform_params(start_params), algo, scaling=True, bounds = bounds, logging=log_opts)
 res.to_pickle('nm_full_model.pkl')
+optim_time = time.time() - start_time
+start_time = time.time()
+simulate_moments(transform_params(res.params))
+one_iter = time.time() - start_time
+timings = {"full_opt": [optim_time], "one_iter" : one_iter}
+time_df = pd.DataFrame(timings)
+time_df.to_csv("optim_timings.csv")
+
 

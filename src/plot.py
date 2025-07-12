@@ -1,13 +1,12 @@
 import optimagic as om
 from model_function import simulate_moments
 import pandas as pd
+import numpy as np
+from utils import retransform_params
+from model_function import simulate_moments
 
-fig = om.params_plot("optim.db")
-fig.show()
-
-res = pd.read_pickle("nelder_mead.pkl")
-
-moments = simulate_moments(res.params)
-print(moments)
-print(res.fun)
-print(res.params)
+reader = om.SQLiteLogReader('nelder_mead_run_1.db')
+history = reader.read_history()
+min_ind = np.argmin(np.asarray(history.fun))
+min_params = retransform_params(history.params[min_ind])
+print(simulate_moments(min_params))

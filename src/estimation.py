@@ -7,6 +7,7 @@ import optimagic as om
 from estimagic.estimate_msm import get_msm_optimization_functions
 from estimagic.msm_weighting import get_weighting_matrix
 import estimagic as em
+from utils import transform_params,retransform_params
 
 rng = np.random.default_rng(seed=0)
 from model_function import simulate_moments
@@ -166,18 +167,12 @@ moment_sd = np.asarray([0.0022079,0.001673,0.0015903,0.0024375,
 W = np.diag(1/moment_sd**2)
 W_root = np.linalg.cholesky(W)
 algo = om.algos.scipy_neldermead(
-    stopping_maxiter=1500
+    stopping_maxfun=1500
 )
 log_opts = om.SQLiteLogOptions(
     path= "optim.db",
     if_database_exists='replace'
 )
-
-def transform_params(params):
-    return {name:jnp.log(value + 0.1) for name,value in params.items()}
-def retransform_params(params):
-    return {name:jnp.exp(value)-0.1 for name,value in params.items()}
-
 
 def criterion_func(params):
     sim_moments = simulate_moments(retransform_params(params))
@@ -193,7 +188,13 @@ def criterion_func(params):
     return residuals
 
 
-lower_bounds = transform_params({"beta_mean": 0.9, "beta_std":0.005, "bb":8, "conp":0.7})
+lower_bounds = transform_params({'nuh_1':0, 'nuh_2':0, 'nuh_3':0, 'nuh_4':0,'nuu_1':0, 'nuu_2':0, 'nuu_3': 0, 'nuu_4':0,
+                'xiHSh_1':0,'xiHSh_2':0,'xiHSh_3':0,'xiHSh_4':0.0,'xiHSu_1':0.0,'xiHSu_2':0.0,
+                'xiHSu_3':0.0,'xiHSu_4':0.0,'xiCLu_1':0.0,'xiCLu_2':0.0,'xiCLu_3':0.0,'xiCLu_4':0.0,
+                'xiCLh_1':0.0,'xiCLh_2':0.0,'xiCLh_3':0.0,'xiCLh_4':0.0,'y1_HS':0,'y1_CL': 0,'ytHS_s':0,
+                'ytHS_sq':-0.15,'wagep_HS':0,'wagep_CL':0,'ytCL_s':0,'ytCL_sq':-0.15, 'sigx':0,
+                'chi_1': 0.0,'chi_2':0.0, 'psi':0.0, 'nuad':0, 'bb':7, 'conp':0.65, 'penre':0.1,
+                'beta_mean':0.9, 'beta_std':0.005})
 upper_bounds = transform_params({"beta_mean": 0.96, "beta_std":0.04, "bb":16, "conp":0.99})
 bounds = om.Bounds(lower=lower_bounds, upper=upper_bounds)
 

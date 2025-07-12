@@ -34,5 +34,11 @@ def gini(x):
     sorted_x = jnp.sort(x)
     n = len(x)
     cumx = jnp.cumsum(sorted_x, dtype=float)
-    # The above formula, with all weights equal to 1 simplifies to:
+
     return (n + 1 - 2 * jnp.sum(cumx) / cumx[-1]) / n
+
+def transform_params(params):
+    return {name:jnp.log(value + 0.2) for name,value in params.items()}
+def retransform_params(params):
+    return {name:jnp.exp(value)-0.2 for name,value in params.items()}
+

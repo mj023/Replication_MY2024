@@ -176,7 +176,7 @@ def create_inputs(seed, nuh_1, nuh_2, nuh_3, nuh_4,nuu_1, nuu_2, nuu_3, nuu_4,xi
     health_draw = random.uniform(new_keys[0],(n,))
     health_thresholds = init_distr_2b2t2h[:,1][types]
     initial_health = jnp.where(health_draw > health_thresholds, 0, 1)
-    initial_health_type = ht[types]
+    initial_health_type = 1-ht[types]
     initial_alive = jnp.ones(n, dtype=jnp.int8)
     initial_education = ed[types]
     initial_productivity = prod[types]
@@ -200,7 +200,7 @@ def model_solve_and_simulate(nuh_1, nuh_2, nuh_3, nuh_4,nuu_1, nuu_2, nuu_3, nuu
     vf_arr = solve(params)
     frames = []
     for i in range(2):
-        res = simulate(params=params,initial_states=initial_states[i],additional_targets=["utility","fcost","pension","income","cnow"], V_arr_dict= vf_arr)
+        res = simulate(params=params,initial_states=initial_states[i],additional_targets=["utility","fcost","pension","income","cnow"], V_arr_dict= vf_arr, seed=i)
         frames.append(res)
     return pd.concat(frames)
 
@@ -215,15 +215,15 @@ def simulate_moments(params):
     for health in range(2):
         for interval in range(4):
             working_pct_10years = (res.loc[(res['_period'] >= (interval*5)) & (res['_period'] < ((interval+1)*5)) & (res['alive'] == 1) & (res['health'] == health), ["working"]].sum()/2)/(res.loc[(res['_period'] >= (interval*5)) & (res['_period'] < ((interval+1)*5)) & (res['alive'] == 1)  &(res['health'] == health), "health"].count())
-            moments[(interval+4*health)] = working_pct_10years.iloc[0]
+            moments[(interval+4*(1-health))] = working_pct_10years.iloc[0]
     for health in range(2):
         for education in range(2):
             for interval in range(6):
                 avg_effort_10years = (res.loc[(res['_period'] >= (interval*5)) & (res['_period'] < ((interval+1)*5)) & (res['alive'] == 1) & (res['health'] == health)& (res['education'] == education), ["effort"]].sum())/(res.loc[(res['_period'] >= (interval*5)) & (res['_period'] < ((interval+1)*5)) &(res['health'] == health) & (res['alive'] == 1) & (res['education'] == education), "effort"].count())
-                moments[(interval+6*health+education*6*2)+8] = avg_effort_10years.iloc[0]
+                moments[(interval+6*(1-health)+education*6*2)+8] = avg_effort_10years.iloc[0]
                 if interval < 4:
                     avg_income_10years = (res.loc[(res['_period'] >= (interval*5)) & (res['_period'] < ((interval+1)*5)) & (res['alive'] == 1) & (res['health'] == health)& (res['education'] == education), ["income"]].sum())/(res.loc[(res['_period'] >= (interval*5)) & (res['_period'] < ((interval+1)*5)) &(res['health'] == health) & (res['alive'] == 1) & (res['education'] == education), "income"].count())
-                    moments[(interval+4*health+education*4*2)+46] = avg_income_10years.iloc[0]*winit[1]/1000
+                    moments[(interval+4*(1-health)+education*4*2)+46] = avg_income_10years.iloc[0]*winit[1]/1000
     for interval in range(6):
                 median_wealth_10y = res.loc[(res['_period'] >= (interval*5)) & (res['_period'] < ((interval+1)*5)) & (res['alive'] == 1) & (res['health'] == health)& (res['education'] == education), ["wealth"]].median()
                 moments[interval+32] = median_wealth_10y.iloc[0]
@@ -242,13 +242,14 @@ def simulate_moments(params):
     moments[42] = vsly
     std_effort = res.loc[res['alive'] == 1, 'effort'].std()
     moments[43] = std_effort
+    moments[44] = gini(jnp.asarray(res.loc[res['alive']== 1, 'wealth'].to_numpy()))
     cons_ratio = (res.loc[(res['alive'] == 1) & (res['health'] == 1), 'cnow'].sum()/res.loc[(res['alive'] == 1) & (res['health'] == 1), 'cnow'].count())/ (res.loc[(res['alive'] == 1) & (res['health'] == 0), 'cnow'].sum()/res.loc[(res['alive'] == 1) & (res['health'] == 0), 'cnow'].count())
-    moments[44] = cons_ratio
+    moments[45] = cons_ratio
     log_earnings = np.log(res.loc[(res['alive'] == 1) & (res['_period']<= retirement_age) & (res['working'] > 0), 'income'] * theta_val[1])
-    moments[61] = log_earnings.var()
+    moments[62] = log_earnings.var()
     pension_sum = (res.loc[(res['alive'] == 1) & (res['_period'] == retirement_age + 1), 'pension'].sum()/ res.loc[(res['alive'] == 1) & (res['_period'] == retirement_age+1), 'pension'].count())
     avg_income = (res.loc[(res['alive'] == 1) & (res['_period'] < retirement_age + 1), 'income'].sum()/ res.loc[(res['alive'] == 1) & (res['_period'] < retirement_age+1), 'income'].count())
-    moments[62] = (pension_sum/avg_income)
-    moments[63] = gini(jnp.asarray(res.loc[res['alive']== 1, 'wealth'].to_numpy()))
+    moments[63] = (pension_sum/avg_income)
+    
     return moments
 

@@ -176,14 +176,14 @@ log_opts = om.SQLiteLogOptions(
 
 def criterion_func(params):
     sim_moments = simulate_moments(retransform_params(params))
-    e = (sim_moments - empirical_moments)/empirical_moments
+    e = sim_moments - empirical_moments
     g_theta = e.T @ W @ e
     return g_theta
 
 @om.mark.least_squares
 def criterion_func(params):
     sim_moments = simulate_moments(retransform_params(params))
-    e = (sim_moments - empirical_moments)/empirical_moments
+    e = sim_moments - empirical_moments
     residuals = e @ W_root
     return residuals
 
@@ -199,14 +199,14 @@ upper_bounds = transform_params({"beta_mean": 0.96, "beta_std":0.04, "bb":16, "c
 bounds = om.Bounds(lower=lower_bounds, upper=upper_bounds)
 
 start_time = time.time()
-res = om.minimize(criterion_func,transform_params(start_params), algo, scaling=True, bounds = bounds, logging=log_opts)
-res.to_pickle('nm_full_model.pkl')
+res = om.minimize(criterion_func,transform_params(start_params), algo, bounds = bounds, logging=log_opts)
+res.to_pickle('nm_full_model_run_3.pkl')
 optim_time = time.time() - start_time
 start_time = time.time()
 simulate_moments(transform_params(res.params))
 one_iter = time.time() - start_time
 timings = {"full_opt": [optim_time], "one_iter" : one_iter}
 time_df = pd.DataFrame(timings)
-time_df.to_csv("optim_timings.csv")
+time_df.to_csv("optim_timings_3.csv")
 
 

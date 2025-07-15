@@ -5,7 +5,9 @@ import numpy as np
 from utils import retransform_params
 from model_function import simulate_moments
 
-reader = om.SQLiteLogReader('nelder_mead_run_1.db')
+""" fig = om.criterion_plot(['optim.db'])
+fig.show() """
+reader = om.SQLiteLogReader('nelder_mead_run_2.db')
 history = reader.read_history()
 min_ind = np.argmin(np.asarray(history.fun))
 min_params = retransform_params(history.params[min_ind])

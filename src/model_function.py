@@ -109,7 +109,6 @@ for i in range(1,3):
             ed = ed.at[index+8].set(1)
 init_distr_2b2t2h = jnp.array(np.loadtxt("init_distr_2b2t2h.txt"))
 initial_dists = jnp.diff(init_distr_2b2t2h[:,0],prepend=0)
-
 solve_and_simulate , _ = get_lcm_function(model=MODEL_CONFIG,jit = True, targets="solve_and_simulate")
 solve , _ = get_lcm_function(model=MODEL_CONFIG,jit = True, targets="solve")
 simulate, _ = get_lcm_function(model=MODEL_CONFIG,jit = True, targets="simulate")
@@ -151,7 +150,6 @@ def create_inputs(seed, nuh_1, nuh_2, nuh_3, nuh_4,nuu_1, nuu_2, nuu_3, nuu_4,xi
     prod_dist = jax.lax.fori_loop(0,1000000, lambda i,a: a @ xtrans.T, jnp.full(5,1/5))
     xi_grid = create_xigrid(xi)
     phi_grid = create_phigrid(nu, nuad)
-    print(phi_grid[:,0,0])
     params = {
     "beta": 1,
     "disutil": {"phigrid": phi_grid},
@@ -182,7 +180,7 @@ def create_inputs(seed, nuh_1, nuh_2, nuh_3, nuh_4,nuu_1, nuu_2, nuu_3, nuu_4,xi
     initial_productivity = prod[types]
     initial_discount = discount[types]
     initial_effort = jnp.searchsorted(eff_grid,init_distr_2b2t2h[:,2][types])
-    initial_adjustment_cost = random.choice(new_keys[1], jnp.arange(10), (n,))
+    initial_adjustment_cost = random.choice(new_keys[1], jnp.arange(5), (n,))
     initial_productivity_shock = random.choice(new_keys[2], jnp.arange(5), (n,), p = prod_dist)
     initial_states = []
     for i in range(2):
@@ -247,9 +245,9 @@ def simulate_moments(params):
     moments[45] = cons_ratio
     log_earnings = np.log(res.loc[(res['alive'] == 1) & (res['_period']<= retirement_age) & (res['working'] > 0), 'income'] * theta_val[1])
     moments[62] = log_earnings.var()
-    pension_sum = (res.loc[(res['alive'] == 1) & (res['_period'] == retirement_age + 1), 'pension'].sum()/ res.loc[(res['alive'] == 1) & (res['_period'] == retirement_age+1), 'pension'].count())
+    pension_avg = (res.loc[(res['alive'] == 1) & (res['_period'] == retirement_age + 1), 'pension'].sum()/ res.loc[(res['alive'] == 1) & (res['_period'] == retirement_age+1), 'pension'].count())
     avg_income = (res.loc[(res['alive'] == 1) & (res['_period'] < retirement_age + 1), 'income'].sum()/ res.loc[(res['alive'] == 1) & (res['_period'] < retirement_age+1), 'income'].count())
-    moments[63] = (pension_sum/avg_income)
-    
+    moments[63] = (pension_avg/avg_income)
+    print(moments)
     return moments
 

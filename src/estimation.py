@@ -165,9 +165,9 @@ moment_sd = np.asarray([0.0022079,0.001673,0.0015903,0.0024375,
         0.0015815 ])                     
 
 W = np.diag(1/moment_sd**2)
-W_root = np.linalg.cholesky(W)
+W_root = np.sqrt(W)
 algo = om.algos.scipy_neldermead(
-    stopping_maxfun=1500
+    stopping_maxfun=2000
 )
 log_opts = om.SQLiteLogOptions(
     path= "optim.db",
@@ -181,7 +181,7 @@ def criterion_func(params):
     return g_theta
 
 @om.mark.least_squares
-def criterion_func(params):
+def criterion_func_sqr(params):
     sim_moments = simulate_moments(retransform_params(params))
     e = sim_moments - empirical_moments
     residuals = e @ W_root
@@ -193,7 +193,7 @@ lower_bounds = transform_params({'nuh_1':0, 'nuh_2':0, 'nuh_3':0, 'nuh_4':0,'nuu
                 'xiHSu_3':0.0,'xiHSu_4':0.0,'xiCLu_1':0.0,'xiCLu_2':0.0,'xiCLu_3':0.0,'xiCLu_4':0.0,
                 'xiCLh_1':0.0,'xiCLh_2':0.0,'xiCLh_3':0.0,'xiCLh_4':0.0,'y1_HS':0,'y1_CL': 0,'ytHS_s':0,
                 'ytHS_sq':-0.15,'wagep_HS':0,'wagep_CL':0,'ytCL_s':0,'ytCL_sq':-0.15, 'sigx':0,
-                'chi_1': 0.0,'chi_2':0.0, 'psi':0.0, 'nuad':0, 'bb':7, 'conp':0.65, 'penre':0.1,
+                'chi_1': 0.0,'chi_2':0.0, 'psi':0.0, 'nuad':0, 'bb':11, 'conp':0.65, 'penre':0.1,
                 'beta_mean':0.9, 'beta_std':0.005})
 upper_bounds = transform_params({"beta_mean": 0.96, "beta_std":0.04, "bb":16, "conp":0.99})
 bounds = om.Bounds(lower=lower_bounds, upper=upper_bounds)

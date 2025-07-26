@@ -119,7 +119,7 @@ start_params = {'nuh_1':nuh_1, 'nuh_2':nuh_2, 'nuh_3':nuh_3, 'nuh_4':nuh_4,'nuu_
                 'xiHSu_3':xiHSu_3,'xiHSu_4':xiHSu_4,'xiCLu_1':xiCLu_1,'xiCLu_2':xiCLu_2,'xiCLu_3':xiCLu_3,'xiCLu_4':xiCLu_4,
                 'xiCLh_1':xiCLh_1,'xiCLh_2':xiCLh_2,'xiCLh_3':xiCLh_3,'xiCLh_4':xiCLh_4,'y1_HS':y1_HS,'y1_CL': y1_CL,'ytHS_s':ytHS_s,
                 'ytHS_sq':ytHS_sq,'wagep_HS':wagep_HS,'wagep_CL':wagep_CL,'ytCL_s':ytCL_s,'ytCL_sq':ytCL_sq, 'sigx':sigx,
-                'chi_1': chi_1,'chi_2':chi_2, 'psi':psi, 'nuad':nuad, 'bb':bb, 'conp':conp, 'penre':penre,
+                'chi_1': chi_1,'chi_2':chi_2, 'psi':psi, 'nuad':nuad, 'bb':11, 'conp':conp, 'penre':penre,
                 'beta_mean':beta_mean, 'beta_std':beta_std}
 empirical_moments = np.asarray([0.6508581,0.7660204,0.8232445,0.6193264, 
         0.5055072,0.5830671,0.6008949,0.4091998,                                              
@@ -164,10 +164,11 @@ moment_sd = np.asarray([0.0022079,0.001673,0.0015903,0.0024375,
         0.0023382,                          
         0.0015815 ])                     
 
-W = np.diag(1/moment_sd**2)
-W_root = np.sqrt(W)
+W_var = np.diag(1/moment_sd**2)
+W_root = np.sqrt(W_var)
+W_ones = np.diag(1)
 algo = om.algos.scipy_neldermead(
-    stopping_maxfun=4000
+    stopping_maxfun=2000
 )
 log_opts = om.SQLiteLogOptions(
     path= "optim.db",
@@ -177,7 +178,7 @@ log_opts = om.SQLiteLogOptions(
 def criterion_func(params):
     sim_moments = simulate_moments(params)
     e = sim_moments - empirical_moments
-    g_theta = e.T @ W @ e
+    g_theta = e.T @ W_ones @ e
     return g_theta
 
 @om.mark.least_squares
@@ -205,14 +206,15 @@ upper_bounds = {'nuh_1':4, 'nuh_2':4, 'nuh_3':4, 'nuh_4':4,'nuu_1':4, 'nuu_2':4,
 bounds = om.Bounds(lower=lower_bounds, upper=upper_bounds)
 
 start_time = time.time()
-res = om.minimize(criterion_func,start_params, algo, bounds=bounds, scaling=om.ScalingOptions(method='bounds'), logging=log_opts)
-res.to_pickle('nm_full_model_run_3.pkl')
+res = om.minimize(criterion_func,start_params, algo, bounds=bounds, scaling=om.ScalingOptions(method='start_values'), logging=log_opts)
+res.to_pickle('nm_full_model_run_1.pkl')
 optim_time = time.time() - start_time
+simulate_moments(start_params)
 start_time = time.time()
 simulate_moments(start_params)
 one_iter = time.time() - start_time
 timings = {"full_opt": [optim_time], "one_iter" : one_iter}
 time_df = pd.DataFrame(timings)
-time_df.to_csv("optim_timings_3.csv")
+time_df.to_csv("nm_optim_timings_1.csv")
 
 

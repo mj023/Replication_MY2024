@@ -167,7 +167,7 @@ moment_sd = np.asarray([0.0022079,0.001673,0.0015903,0.0024375,
 W = np.diag(1/moment_sd**2)
 W_root = np.sqrt(W)
 algo = om.algos.scipy_neldermead(
-    stopping_maxfun=2000
+    stopping_maxfun=4000
 )
 log_opts = om.SQLiteLogOptions(
     path= "optim.db",
@@ -175,7 +175,7 @@ log_opts = om.SQLiteLogOptions(
 )
 
 def criterion_func(params):
-    sim_moments = simulate_moments(retransform_params(params))
+    sim_moments = simulate_moments(params)
     e = sim_moments - empirical_moments
     g_theta = e.T @ W @ e
     return g_theta
@@ -188,22 +188,28 @@ def criterion_func_sqr(params):
     return residuals
 
 
-lower_bounds = transform_params({'nuh_1':0, 'nuh_2':0, 'nuh_3':0, 'nuh_4':0,'nuu_1':0, 'nuu_2':0, 'nuu_3': 0, 'nuu_4':0,
+lower_bounds = {'nuh_1':0, 'nuh_2':0, 'nuh_3':0, 'nuh_4':0,'nuu_1':0, 'nuu_2':0, 'nuu_3': 0, 'nuu_4':0,
                 'xiHSh_1':0,'xiHSh_2':0,'xiHSh_3':0,'xiHSh_4':0.0,'xiHSu_1':0.0,'xiHSu_2':0.0,
                 'xiHSu_3':0.0,'xiHSu_4':0.0,'xiCLu_1':0.0,'xiCLu_2':0.0,'xiCLu_3':0.0,'xiCLu_4':0.0,
                 'xiCLh_1':0.0,'xiCLh_2':0.0,'xiCLh_3':0.0,'xiCLh_4':0.0,'y1_HS':0,'y1_CL': 0,'ytHS_s':0,
                 'ytHS_sq':-0.15,'wagep_HS':0,'wagep_CL':0,'ytCL_s':0,'ytCL_sq':-0.15, 'sigx':0,
-                'chi_1': 0.0,'chi_2':0.0, 'psi':0.0, 'nuad':0, 'bb':11, 'conp':0.65, 'penre':0.1,
-                'beta_mean':0.9, 'beta_std':0.005})
-upper_bounds = transform_params({"beta_mean": 0.96, "beta_std":0.04, "bb":16, "conp":0.99})
+                'chi_1': 0.0,'chi_2':0.0, 'psi':0.0, 'nuad':0, 'bb':9, 'conp':0.65, 'penre':0.2,
+                'beta_mean':0.9, 'beta_std':0.005}
+upper_bounds = {'nuh_1':4, 'nuh_2':4, 'nuh_3':4, 'nuh_4':4,'nuu_1':4, 'nuu_2':4, 'nuu_3': 4, 'nuu_4':4,
+                'xiHSh_1':3,'xiHSh_2':3,'xiHSh_3':3,'xiHSh_4':3,'xiHSu_1':3,'xiHSu_2':3,
+                'xiHSu_3':3,'xiHSu_4':3,'xiCLu_1':3,'xiCLu_2':3,'xiCLu_3':3,'xiCLu_4':3,
+                'xiCLh_1':3,'xiCLh_2':3,'xiCLh_3':3,'xiCLh_4':3,'y1_HS':2,'y1_CL': 2,'ytHS_s':0.3,
+                'ytHS_sq':0.2,'wagep_HS':0.3,'wagep_CL':0.3,'ytCL_s':0.3,'ytCL_sq':0.2, 'sigx':0.1,
+                'chi_1': 0.01,'chi_2':0.3, 'psi':2, 'nuad':1.5, 'bb':15, 'conp':1, 'penre':0.6,
+                'beta_mean':0.97, 'beta_std':0.09}
 bounds = om.Bounds(lower=lower_bounds, upper=upper_bounds)
 
 start_time = time.time()
-res = om.minimize(criterion_func,transform_params(start_params), algo, bounds = bounds, logging=log_opts)
+res = om.minimize(criterion_func,start_params, algo, bounds=bounds, scaling=om.ScalingOptions(method='bounds'), logging=log_opts)
 res.to_pickle('nm_full_model_run_3.pkl')
 optim_time = time.time() - start_time
 start_time = time.time()
-simulate_moments(transform_params(res.params))
+simulate_moments(start_params)
 one_iter = time.time() - start_time
 timings = {"full_opt": [optim_time], "one_iter" : one_iter}
 time_df = pd.DataFrame(timings)

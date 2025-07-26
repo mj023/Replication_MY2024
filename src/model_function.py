@@ -115,13 +115,19 @@ simulate, _ = get_lcm_function(model=MODEL_CONFIG,jit = True, targets="simulate"
 
 surv_HS = jnp.array(np.loadtxt("surv_HS.txt"))
 surv_CL = jnp.array(np.loadtxt("surv_CL.txt"))
-spgrid = jnp.zeros((2,38,2,2,2))
-spgrid = spgrid.at[1,:,0,0,1].set(surv_HS[:,1])
-spgrid = spgrid.at[1,:,1,0,1].set(surv_CL[:,1])
-spgrid = spgrid.at[1,:,0,1,1].set(surv_HS[:,0])
-spgrid = spgrid.at[1,:,1,1,1].set(surv_CL[:,0])
-spgrid = spgrid.at[0,:,:,:,1].set(0)
-spgrid = spgrid.at[:,:,:,:,0].set(1-spgrid[:,:,:,:,1])
+spgrid = jnp.zeros((38,2,2))
+spgrid = spgrid.at[:,0,0].set(surv_HS[:,1])
+spgrid = spgrid.at[:,1,0].set(surv_CL[:,1])
+spgrid = spgrid.at[:,0,1].set(surv_HS[:,0])
+spgrid = spgrid.at[:,1,1].set(surv_CL[:,0])
+
+def draw_alive(period, education, health, initial_thresholds_alive):
+    thresholds = jnp.ones(39*10000)
+    thresholds = thresholds.at[10000:].set(spgrid[period,education,health])
+    alive = jnp.where(thresholds > initial_thresholds_alive, 1,0)
+    alive = alive.reshape(39,10000)
+    alive = jnp.cumprod(alive, axis=0)
+    return alive.flatten()[:-10000]
 
 def create_inputs(seed, nuh_1, nuh_2, nuh_3, nuh_4,nuu_1, nuu_2, nuu_3, nuu_4,xiHSh_1,xiHSh_2,xiHSh_3,xiHSh_4,xiHSu_1,xiHSu_2,xiHSu_3,xiHSu_4,xiCLu_1,xiCLu_2,xiCLu_3,xiCLu_4,xiCLh_1,xiCLh_2,xiCLh_3,xiCLh_4,y1_HS,y1_CL,ytHS_s,ytHS_sq,wagep_HS,wagep_CL,ytCL_s,ytCL_sq, sigx, chi_1,chi_2, psi, nuad, bb, conp, penre, beta_mean, beta_std):
     nuh = jnp.array([nuh_1, nuh_2, nuh_3, nuh_4])
@@ -152,6 +158,7 @@ def create_inputs(seed, nuh_1, nuh_2, nuh_3, nuh_4,nuu_1, nuu_2, nuu_3, nuu_4,xi
     phi_grid = create_phigrid(nu, nuad)
     params = {
     "beta": 1,
+    "spgrid": spgrid,
     "disutil": {"phigrid": phi_grid},
     "fcost" : {"psi": psi, "xigrid":xi_grid},
     "cons_util": {"sigma": sigma, "bb": bb, "kappa" : conp},
@@ -163,9 +170,8 @@ def create_inputs(seed, nuh_1, nuh_2, nuh_3, nuh_4,nuu_1, nuu_2, nuu_3, nuu_4,xi
         "productivity_shock": xtrans.T,
         "health": tr2yp_grid,
         "adjustment_cost": jnp.full((5, 5), 1/5),
-        "alive": spgrid
     }}
-    n = 4000
+    n = 10000
     eff_grid = jnp.linspace(0,1,40)
     key = random.key(seed)
     initial_wealth = jnp.full((n), 0, dtype=jnp.int8)
@@ -175,32 +181,28 @@ def create_inputs(seed, nuh_1, nuh_2, nuh_3, nuh_4,nuu_1, nuu_2, nuu_3, nuu_4,xi
     health_thresholds = init_distr_2b2t2h[:,1][types]
     initial_health = jnp.where(health_draw > health_thresholds, 0, 1)
     initial_health_type = 1-ht[types]
-    initial_alive = jnp.ones(n, dtype=jnp.int8)
     initial_education = ed[types]
     initial_productivity = prod[types]
     initial_discount = discount[types]
     initial_effort = jnp.searchsorted(eff_grid,init_distr_2b2t2h[:,2][types])
     initial_adjustment_cost = random.choice(new_keys[1], jnp.arange(5), (n,))
     initial_productivity_shock = random.choice(new_keys[2], jnp.arange(5), (n,), p = prod_dist)
-    initial_states = []
-    for i in range(2):
-        initial_states.append({"wealth": initial_wealth[i*2000:((i+1)*2000)-1], "health": initial_health[i*2000:((i+1)*2000)-1], "health_type": initial_health_type[i*2000:((i+1)*2000)-1], "effort_t_1": initial_effort[i*2000:((i+1)*2000)-1], 
-                      "productivity_shock": initial_productivity_shock[i*2000:((i+1)*2000)-1], "adjustment_cost": initial_adjustment_cost[i*2000:((i+1)*2000)-1],
-                      "education": initial_education[i*2000:((i+1)*2000)-1], "alive":initial_alive[i*2000:((i+1)*2000)-1], "productivity": initial_productivity[i*2000:((i+1)*2000)-1], "discount_factor": initial_discount[i*2000:((i+1)*2000)-1]
-                      })
-    return params, initial_states
+    initial_states = {"wealth": initial_wealth, "health": initial_health, "health_type": initial_health_type, "effort_t_1": initial_effort, 
+                    "productivity_shock": initial_productivity_shock, "adjustment_cost": initial_adjustment_cost,
+                    "education": initial_education, "productivity": initial_productivity, "discount_factor": initial_discount
+                    }
+    initial_thresholds_alive = random.uniform(new_keys[3], (39*n))
+    return params, initial_states,initial_thresholds_alive
 
 jitted_create_inputs = jax.jit(create_inputs)
 
 def model_solve_and_simulate(nuh_1, nuh_2, nuh_3, nuh_4,nuu_1, nuu_2, nuu_3, nuu_4,xiHSh_1,xiHSh_2,xiHSh_3,xiHSh_4,xiHSu_1,xiHSu_2,xiHSu_3,xiHSu_4,xiCLu_1,xiCLu_2,xiCLu_3,xiCLu_4,xiCLh_1,xiCLh_2,xiCLh_3,xiCLh_4,y1_HS,y1_CL,ytHS_s,ytHS_sq,wagep_HS,wagep_CL,ytCL_s,ytCL_sq, sigx, chi_1,chi_2, psi, nuad, bb, conp, penre, beta_mean, beta_std):
     seed = 32
-    params, initial_states = jitted_create_inputs(seed,nuh_1, nuh_2, nuh_3, nuh_4,nuu_1, nuu_2, nuu_3, nuu_4,xiHSh_1,xiHSh_2,xiHSh_3,xiHSh_4,xiHSu_1,xiHSu_2,xiHSu_3,xiHSu_4,xiCLu_1,xiCLu_2,xiCLu_3,xiCLu_4,xiCLh_1,xiCLh_2,xiCLh_3,xiCLh_4,y1_HS,y1_CL,ytHS_s,ytHS_sq,wagep_HS,wagep_CL,ytCL_s,ytCL_sq, sigx, chi_1,chi_2, psi, nuad, bb, conp, penre, beta_mean, beta_std)
+    params, initial_states, initial_thresholds_alive = jitted_create_inputs(seed,nuh_1, nuh_2, nuh_3, nuh_4,nuu_1, nuu_2, nuu_3, nuu_4,xiHSh_1,xiHSh_2,xiHSh_3,xiHSh_4,xiHSu_1,xiHSu_2,xiHSu_3,xiHSu_4,xiCLu_1,xiCLu_2,xiCLu_3,xiCLu_4,xiCLh_1,xiCLh_2,xiCLh_3,xiCLh_4,y1_HS,y1_CL,ytHS_s,ytHS_sq,wagep_HS,wagep_CL,ytCL_s,ytCL_sq, sigx, chi_1,chi_2, psi, nuad, bb, conp, penre, beta_mean, beta_std)
     vf_arr = solve(params)
-    frames = []
-    for i in range(2):
-        res = simulate(params=params,initial_states=initial_states[i],additional_targets=["utility","fcost","pension","income","cnow"], V_arr_dict= vf_arr, seed=i)
-        frames.append(res)
-    return pd.concat(frames)
+    res = simulate(params=params,initial_states=initial_states,additional_targets=["utility","fcost","pension","income","cnow"], V_arr_dict= vf_arr, seed=42)
+    res['alive'] = draw_alive(jnp.asarray(res['_period'].to_numpy()), jnp.asarray(res['education'].to_numpy()), jnp.asarray(res['health'].to_numpy()), initial_thresholds_alive)
+    return res
 
 def simulate_moments(params):
 

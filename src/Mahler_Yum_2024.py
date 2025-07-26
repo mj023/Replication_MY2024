@@ -83,14 +83,13 @@ eff_grid = jnp.linspace(0,1,40)
 # ======================================================================================
 # Model functions
 # ======================================================================================
-
 # --------------------------------------------------------------------------------------
 # Utility function
 # --------------------------------------------------------------------------------------
-def utility(_period, alive,health_type,education,adj_cost, fcost,disutil,cons_util,discount_factor, beta_mean, beta_std):
+def utility(_period,health_type,education,adj_cost, fcost,disutil,cons_util,discount_factor, beta_mean, beta_std):
     beta = beta_mean + jnp.where(discount_factor, beta_std, -beta_std)
-    f = cons_util - disutil - fcost- adj_cost   
-    return f * alive *(beta**(_period))
+    f = cons_util - disutil - fcost- adj_cost
+    return f * (beta**_period)
 def disutil(working, health,education, _period, phigrid):
     return phigrid[_period,education,health] * ((working/2)**(2))/2
 def adj_cost(_period,adjustment_cost, effort, effort_t_1, chimaxgrid):
@@ -111,6 +110,7 @@ def fcost(_period,education,health,effort, psi, xigrid):
 # Income Calculation
 # --------------------------------------------------------------------------------------
 def net_income(benefits, taxed_income, pension):
+
     return taxed_income + pension + benefits
 def income(working, _period, health, education, productivity , productivity_shock, xvalues, income_grid):
     return income_grid[ _period, health, education]*(working/2)*theta_val[productivity]*jnp.exp(xvalues[productivity_shock])
@@ -135,7 +135,7 @@ def next_discount_factor(discount_factor):
 def next_alive(alive, _period, education, health):
     pass
 @lcm.mark.stochastic
-def next_health(_period, health, effort, effort_t_1, education, health_type):
+def next_health(_period, health, effort,effort_t_1, education, health_type):
     pass
 def next_productivity(productivity):
     return productivity
@@ -180,7 +180,6 @@ MODEL_CONFIG = Model(
         "next_discount_factor": next_discount_factor,
         "next_adjustment_cost": next_adjustment_cost,
         "next_effort_t_1": next_effort_t_1,
-        "next_alive": next_alive,
         "next_health_type": next_health_type,
         "next_education": next_education,
         "next_productivity": next_productivity,
@@ -201,7 +200,6 @@ MODEL_CONFIG = Model(
     states={
         "wealth":  LinspaceGrid(start=0,stop=49,n_points=50),
         "health": DiscreteGrid(Health),
-        "alive": DiscreteGrid(Alive),
         "productivity_shock": DiscreteGrid(ProductivityShock),
         "effort_t_1": DiscreteGrid(Effort),
         "adjustment_cost": DiscreteGrid(AdjustmentCost),

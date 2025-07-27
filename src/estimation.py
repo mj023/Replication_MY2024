@@ -209,7 +209,7 @@ upper_bounds = {'nuh_1':4, 'nuh_2':4, 'nuh_3':4, 'nuh_4':4,'nuu_1':4, 'nuu_2':4,
 bounds = om.Bounds(lower=lower_bounds, upper=upper_bounds)
 
 start_time = time.time()
-res = om.minimize(criterion_func_sqr,start_params, algo_nm, bounds=bounds, scaling=om.ScalingOptions(method='bounds', clipping_value=0.0001), logging=log_opts)
+res = om.minimize(criterion_func_sqr,start_params, algo_pounders, bounds=bounds, scaling=om.ScalingOptions(method='bounds', clipping_value=0.0001), logging=log_opts)
 res.to_pickle('pd_full_model_run_1.pkl')
 optim_time = time.time() - start_time
 simulate_moments(start_params)

@@ -166,19 +166,19 @@ moment_sd = np.asarray([0.0022079,0.001673,0.0015903,0.0024375,
 
 W_var = np.diag(1/moment_sd**2)
 W_root = np.sqrt(W_var)
-W_ones = np.diag(1)
+W_ones = np.diag(np.ones(64))
 algo = om.algos.scipy_neldermead(
     stopping_maxfun=2000
 )
 log_opts = om.SQLiteLogOptions(
-    path= "optim.db",
+    path= "nm_ones_1.db",
     if_database_exists='replace'
 )
 
 def criterion_func(params):
     sim_moments = simulate_moments(params)
     e = sim_moments - empirical_moments
-    g_theta = e.T @ W_ones @ e
+    g_theta = e.T @ W_var @ e
     return g_theta
 
 @om.mark.least_squares

@@ -119,7 +119,7 @@ start_params = {'nuh_1':nuh_1, 'nuh_2':nuh_2, 'nuh_3':nuh_3, 'nuh_4':nuh_4,'nuu_
                 'xiHSu_3':xiHSu_3,'xiHSu_4':xiHSu_4,'xiCLu_1':xiCLu_1,'xiCLu_2':xiCLu_2,'xiCLu_3':xiCLu_3,'xiCLu_4':xiCLu_4,
                 'xiCLh_1':xiCLh_1,'xiCLh_2':xiCLh_2,'xiCLh_3':xiCLh_3,'xiCLh_4':xiCLh_4,'y1_HS':y1_HS,'y1_CL': y1_CL,'ytHS_s':ytHS_s,
                 'ytHS_sq':ytHS_sq,'wagep_HS':wagep_HS,'wagep_CL':wagep_CL,'ytCL_s':ytCL_s,'ytCL_sq':ytCL_sq, 'sigx':sigx,
-                'chi_1': chi_1,'chi_2':chi_2, 'psi':psi, 'nuad':nuad, 'bb':11, 'conp':conp, 'penre':penre,
+                'chi_1': chi_1,'chi_2':chi_2, 'psi':psi, 'nuad':nuad, 'bb':10, 'conp':conp, 'penre':penre,
                 'beta_mean':beta_mean, 'beta_std':beta_std}
 empirical_moments = np.asarray([0.6508581,0.7660204,0.8232445,0.6193264, 
         0.5055072,0.5830671,0.6008949,0.4091998,                                              
@@ -167,11 +167,14 @@ moment_sd = np.asarray([0.0022079,0.001673,0.0015903,0.0024375,
 W_var = np.diag(1/moment_sd**2)
 W_root = np.sqrt(W_var)
 W_ones = np.diag(np.ones(64))
-algo = om.algos.scipy_neldermead(
+algo_nm = om.algos.scipy_neldermead(
     stopping_maxfun=2000
 )
+algo_pounders = om.algos.pounders(
+    stopping_maxiter=1000
+)
 log_opts = om.SQLiteLogOptions(
-    path= "nm_ones_1.db",
+    path= "pd_var_1.db",
     if_database_exists='replace'
 )
 
@@ -183,7 +186,7 @@ def criterion_func(params):
 
 @om.mark.least_squares
 def criterion_func_sqr(params):
-    sim_moments = simulate_moments(retransform_params(params))
+    sim_moments = simulate_moments(params)
     e = sim_moments - empirical_moments
     residuals = e @ W_root
     return residuals
@@ -194,7 +197,7 @@ lower_bounds = {'nuh_1':0, 'nuh_2':0, 'nuh_3':0, 'nuh_4':0,'nuu_1':0, 'nuu_2':0,
                 'xiHSu_3':0.0,'xiHSu_4':0.0,'xiCLu_1':0.0,'xiCLu_2':0.0,'xiCLu_3':0.0,'xiCLu_4':0.0,
                 'xiCLh_1':0.0,'xiCLh_2':0.0,'xiCLh_3':0.0,'xiCLh_4':0.0,'y1_HS':0,'y1_CL': 0,'ytHS_s':0,
                 'ytHS_sq':-0.15,'wagep_HS':0,'wagep_CL':0,'ytCL_s':0,'ytCL_sq':-0.15, 'sigx':0,
-                'chi_1': 0.0,'chi_2':0.0, 'psi':0.0, 'nuad':0, 'bb':9, 'conp':0.65, 'penre':0.2,
+                'chi_1': 0.0,'chi_2':0.0, 'psi':0.0, 'nuad':0, 'bb':8, 'conp':0.65, 'penre':0.2,
                 'beta_mean':0.9, 'beta_std':0.005}
 upper_bounds = {'nuh_1':4, 'nuh_2':4, 'nuh_3':4, 'nuh_4':4,'nuu_1':4, 'nuu_2':4, 'nuu_3': 4, 'nuu_4':4,
                 'xiHSh_1':3,'xiHSh_2':3,'xiHSh_3':3,'xiHSh_4':3,'xiHSu_1':3,'xiHSu_2':3,
@@ -206,8 +209,8 @@ upper_bounds = {'nuh_1':4, 'nuh_2':4, 'nuh_3':4, 'nuh_4':4,'nuu_1':4, 'nuu_2':4,
 bounds = om.Bounds(lower=lower_bounds, upper=upper_bounds)
 
 start_time = time.time()
-res = om.minimize(criterion_func,start_params, algo, bounds=bounds, scaling=om.ScalingOptions(method='start_values'), logging=log_opts)
-res.to_pickle('nm_full_model_run_1.pkl')
+res = om.minimize(criterion_func_sqr,start_params, algo_nm, bounds=bounds, scaling=om.ScalingOptions(method='bounds', clipping_value=0.0001), logging=log_opts)
+res.to_pickle('pd_full_model_run_1.pkl')
 optim_time = time.time() - start_time
 simulate_moments(start_params)
 start_time = time.time()
@@ -215,6 +218,6 @@ simulate_moments(start_params)
 one_iter = time.time() - start_time
 timings = {"full_opt": [optim_time], "one_iter" : one_iter}
 time_df = pd.DataFrame(timings)
-time_df.to_csv("nm_optim_timings_1.csv")
+time_df.to_csv("pd_optim_timings_1.csv")
 
 

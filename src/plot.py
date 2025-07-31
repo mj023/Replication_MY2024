@@ -113,12 +113,13 @@ start_params = {'nuh_1':nuh_1, 'nuh_2':nuh_2, 'nuh_3':nuh_3, 'nuh_4':nuh_4,'nuu_
                 'xiHSu_3':xiHSu_3,'xiHSu_4':xiHSu_4,'xiCLu_1':xiCLu_1,'xiCLu_2':xiCLu_2,'xiCLu_3':xiCLu_3,'xiCLu_4':xiCLu_4,
                 'xiCLh_1':xiCLh_1,'xiCLh_2':xiCLh_2,'xiCLh_3':xiCLh_3,'xiCLh_4':xiCLh_4,'y1_HS':y1_HS,'y1_CL': y1_CL,'ytHS_s':ytHS_s,
                 'ytHS_sq':ytHS_sq,'wagep_HS':wagep_HS,'wagep_CL':wagep_CL,'ytCL_s':ytCL_s,'ytCL_sq':ytCL_sq, 'sigx':sigx,
-                'chi_1': chi_1,'chi_2':chi_2, 'psi':psi, 'nuad':nuad, 'bb':bb, 'conp':conp, 'penre':penre,
+                'chi_1': chi_1,'chi_2':chi_2, 'psi':psi, 'nuad':nuad, 'bb':11, 'conp':conp, 'penre':penre,
                 'beta_mean':beta_mean, 'beta_std':beta_std}
-fig = om.criterion_plot(['optim.db'])
+fig = om.criterion_plot(['../optim_results/pd_var_4.db'])
+#fig.write_image("../plots/comp_algos.pdf")
 fig.show()
-""" reader = om.SQLiteLogReader('optim.db')
+""" reader = om.SQLiteLogReader('../optim_results/pd_var_1.db')
 history = reader.read_history()
 min_ind = np.argmin(np.asarray(history.fun))
-min_params = retransform_params(history.params[min_ind])
-print(simulate_moments(start_params)) """
+min_params = history.params[min_ind]
+print(simulate_moments(min_params)) """

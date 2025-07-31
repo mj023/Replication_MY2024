@@ -4,12 +4,7 @@ import numpy as np
 import time
 import pandas as pd
 import optimagic as om
-from estimagic.estimate_msm import get_msm_optimization_functions
-from estimagic.msm_weighting import get_weighting_matrix
-import estimagic as em
-from utils import transform_params,retransform_params
 
-rng = np.random.default_rng(seed=0)
 from model_function import simulate_moments
 
 ########################
@@ -209,7 +204,7 @@ upper_bounds = {'nuh_1':4, 'nuh_2':4, 'nuh_3':4, 'nuh_4':4,'nuu_1':4, 'nuu_2':4,
 bounds = om.Bounds(lower=lower_bounds, upper=upper_bounds)
 
 start_time = time.time()
-res = om.minimize(criterion_func_sqr,start_params, algo_pounders, bounds=bounds, scaling=om.ScalingOptions(method='bounds', clipping_value=0.0001), logging=log_opts)
+res = om.minimize(criterion_func_sqr,start_params, algo_pounders, bounds=bounds, scaling=True, logging=log_opts)
 res.to_pickle('pd_full_model_run_1.pkl')
 optim_time = time.time() - start_time
 simulate_moments(start_params)

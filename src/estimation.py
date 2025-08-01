@@ -166,13 +166,18 @@ algo_nm = om.algos.scipy_neldermead(
     stopping_maxfun=2000
 )
 algo_pounders = om.algos.tao_pounders(
-    stopping_maxiter=1000
+    stopping_maxiter=400
 )
 log_opts = om.SQLiteLogOptions(
-    path= "pd_var_1.db",
+    path= "pd_var_2.db",
     if_database_exists='replace'
 )
+key = jax.random.key(33)
 
+vals = jax.random.uniform(key, (42), maxval=0.4)
+start_params_keys = list(start_params.keys())
+for i in range(42):
+    start_params[start_params_keys[i]] = start_params[start_params_keys[i]] + start_params[start_params_keys[i]]*(vals[i]-0.2)
 def criterion_func(params):
     sim_moments = simulate_moments(params)
     e = sim_moments - empirical_moments
@@ -185,7 +190,8 @@ def criterion_func_sqr(params):
     e = sim_moments - empirical_moments
     residuals = e @ W_root
     return residuals
-
+start_params['conp'] = 0.9
+start_params['beta_mean'] = 0.93
 
 lower_bounds = {'nuh_1':0, 'nuh_2':0, 'nuh_3':0, 'nuh_4':0,'nuu_1':0, 'nuu_2':0, 'nuu_3': 0, 'nuu_4':0,
                 'xiHSh_1':0,'xiHSh_2':0,'xiHSh_3':0,'xiHSh_4':0.0,'xiHSu_1':0.0,'xiHSu_2':0.0,
@@ -193,14 +199,14 @@ lower_bounds = {'nuh_1':0, 'nuh_2':0, 'nuh_3':0, 'nuh_4':0,'nuu_1':0, 'nuu_2':0,
                 'xiCLh_1':0.0,'xiCLh_2':0.0,'xiCLh_3':0.0,'xiCLh_4':0.0,'y1_HS':0,'y1_CL': 0,'ytHS_s':0,
                 'ytHS_sq':-0.15,'wagep_HS':0,'wagep_CL':0,'ytCL_s':0,'ytCL_sq':-0.15, 'sigx':0,
                 'chi_1': 0.0,'chi_2':0.0, 'psi':0.0, 'nuad':0, 'bb':6, 'conp':0.65, 'penre':0.2,
-                'beta_mean':0.9, 'beta_std':0.005}
+                'beta_mean':0.8, 'beta_std':0.005}
 upper_bounds = {'nuh_1':4, 'nuh_2':4, 'nuh_3':4, 'nuh_4':4,'nuu_1':4, 'nuu_2':4, 'nuu_3': 4, 'nuu_4':4,
                 'xiHSh_1':3,'xiHSh_2':3,'xiHSh_3':3,'xiHSh_4':3,'xiHSu_1':3,'xiHSu_2':3,
                 'xiHSu_3':3,'xiHSu_4':3,'xiCLu_1':3,'xiCLu_2':3,'xiCLu_3':3,'xiCLu_4':3,
                 'xiCLh_1':3,'xiCLh_2':3,'xiCLh_3':3,'xiCLh_4':3,'y1_HS':2,'y1_CL': 2,'ytHS_s':0.3,
                 'ytHS_sq':0.2,'wagep_HS':0.3,'wagep_CL':0.3,'ytCL_s':0.3,'ytCL_sq':0.2, 'sigx':0.1,
                 'chi_1': 0.01,'chi_2':0.3, 'psi':2, 'nuad':1.5, 'bb':15, 'conp':1, 'penre':0.6,
-                'beta_mean':0.97, 'beta_std':0.09}
+                'beta_mean':1.05, 'beta_std':0.09}
 bounds = om.Bounds(lower=lower_bounds, upper=upper_bounds)
 
 start_time = time.time()
@@ -214,6 +220,6 @@ simulate_moments(start_params)
 one_iter = time.time() - start_time
 timings = {"full_opt": [optim_time], "one_iter" : one_iter}
 time_df = pd.DataFrame(timings)
-time_df.to_csv("pd_optim_timings_1.csv")
+time_df.to_csv("pd_optim_timings_2.csv")
 
 

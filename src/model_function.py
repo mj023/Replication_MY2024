@@ -122,12 +122,12 @@ spgrid = spgrid.at[:,0,1].set(surv_HS[:,0])
 spgrid = spgrid.at[:,1,1].set(surv_CL[:,0])
 
 def draw_alive(period, education, health, initial_thresholds_alive):
-    thresholds = jnp.ones(39*10000)
-    thresholds = thresholds.at[10000:].set(spgrid[period,education,health])
+    thresholds = jnp.ones(39*20000)
+    thresholds = thresholds.at[20000:].set(spgrid[period,education,health])
     alive = jnp.where(thresholds > initial_thresholds_alive, 1,0)
-    alive = alive.reshape(39,10000)
+    alive = alive.reshape(39,20000)
     alive = jnp.cumprod(alive, axis=0)
-    return alive.flatten()[:-10000]
+    return alive.flatten()[:-20000]
 
 def create_inputs(seed, nuh_1, nuh_2, nuh_3, nuh_4,nuu_1, nuu_2, nuu_3, nuu_4,xiHSh_1,xiHSh_2,xiHSh_3,xiHSh_4,xiHSu_1,xiHSu_2,xiHSu_3,xiHSu_4,xiCLu_1,xiCLu_2,xiCLu_3,xiCLu_4,xiCLh_1,xiCLh_2,xiCLh_3,xiCLh_4,y1_HS,y1_CL,ytHS_s,ytHS_sq,wagep_HS,wagep_CL,ytCL_s,ytCL_sq, sigx, chi_1,chi_2, psi, nuad, bb, conp, penre, beta_mean, beta_std):
     nuh = jnp.array([nuh_1, nuh_2, nuh_3, nuh_4])
@@ -171,7 +171,7 @@ def create_inputs(seed, nuh_1, nuh_2, nuh_3, nuh_4,nuu_1, nuu_2, nuu_3, nuu_4,xi
         "health": tr2yp_grid,
         "adjustment_cost": jnp.full((5, 5), 1/5),
     }}
-    n = 10000
+    n = 20000
     eff_grid = jnp.linspace(0,1,40)
     key = random.key(seed)
     initial_wealth = jnp.full((n), 0, dtype=jnp.int8)

@@ -165,7 +165,7 @@ W_ones = np.diag(np.ones(64))
 algo_nm = om.algos.scipy_neldermead(
     stopping_maxfun=2000
 )
-algo_pounders = om.algos.pounders(
+algo_pounders = om.algos.tao_pounders(
     stopping_maxiter=1000
 )
 log_opts = om.SQLiteLogOptions(
@@ -192,7 +192,7 @@ lower_bounds = {'nuh_1':0, 'nuh_2':0, 'nuh_3':0, 'nuh_4':0,'nuu_1':0, 'nuu_2':0,
                 'xiHSu_3':0.0,'xiHSu_4':0.0,'xiCLu_1':0.0,'xiCLu_2':0.0,'xiCLu_3':0.0,'xiCLu_4':0.0,
                 'xiCLh_1':0.0,'xiCLh_2':0.0,'xiCLh_3':0.0,'xiCLh_4':0.0,'y1_HS':0,'y1_CL': 0,'ytHS_s':0,
                 'ytHS_sq':-0.15,'wagep_HS':0,'wagep_CL':0,'ytCL_s':0,'ytCL_sq':-0.15, 'sigx':0,
-                'chi_1': 0.0,'chi_2':0.0, 'psi':0.0, 'nuad':0, 'bb':8, 'conp':0.65, 'penre':0.2,
+                'chi_1': 0.0,'chi_2':0.0, 'psi':0.0, 'nuad':0, 'bb':6, 'conp':0.65, 'penre':0.2,
                 'beta_mean':0.9, 'beta_std':0.005}
 upper_bounds = {'nuh_1':4, 'nuh_2':4, 'nuh_3':4, 'nuh_4':4,'nuu_1':4, 'nuu_2':4, 'nuu_3': 4, 'nuu_4':4,
                 'xiHSh_1':3,'xiHSh_2':3,'xiHSh_3':3,'xiHSh_4':3,'xiHSu_1':3,'xiHSu_2':3,
@@ -204,7 +204,8 @@ upper_bounds = {'nuh_1':4, 'nuh_2':4, 'nuh_3':4, 'nuh_4':4,'nuu_1':4, 'nuu_2':4,
 bounds = om.Bounds(lower=lower_bounds, upper=upper_bounds)
 
 start_time = time.time()
-res = om.minimize(criterion_func_sqr,start_params, algo_pounders, bounds=bounds, scaling=True, logging=log_opts)
+
+res = om.minimize(criterion_func_sqr,start_params, algo_pounders, bounds=bounds, scaling=om.ScalingOptions(method='bounds', clipping_value=0.0001), logging=log_opts)
 res.to_pickle('pd_full_model_run_1.pkl')
 optim_time = time.time() - start_time
 simulate_moments(start_params)

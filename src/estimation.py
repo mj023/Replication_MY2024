@@ -176,8 +176,7 @@ key = jax.random.key(33)
 
 vals = jax.random.uniform(key, (42), maxval=0.4)
 start_params_keys = list(start_params.keys())
-for i in range(42):
-    start_params[start_params_keys[i]] = start_params[start_params_keys[i]] + start_params[start_params_keys[i]]*(vals[i]-0.2)
+
 def criterion_func(params):
     sim_moments = simulate_moments(params)
     e = sim_moments - empirical_moments
@@ -207,8 +206,16 @@ upper_bounds = {'nuh_1':4, 'nuh_2':4, 'nuh_3':4, 'nuh_4':4,'nuu_1':4, 'nuu_2':4,
                 'ytHS_sq':0.2,'wagep_HS':0.3,'wagep_CL':0.3,'ytCL_s':0.3,'ytCL_sq':0.2, 'sigx':0.1,
                 'chi_1': 0.01,'chi_2':0.3, 'psi':2, 'nuad':1.5, 'bb':15, 'conp':1, 'penre':0.6,
                 'beta_mean':1.05, 'beta_std':0.09}
+
+for i in range(42):
+    start_params[start_params_keys[i]] = np.asarray(start_params[start_params_keys[i]] + start_params[start_params_keys[i]]*(vals[i]-0.2))
+    lower_bounds[start_params_keys[i]] = np.asarray(lower_bounds[start_params_keys[i]])
+    upper_bounds[start_params_keys[i]] = np.asarray(upper_bounds[start_params_keys[i]])
+start_params['conp'] = np.asarray(0.9)
+start_params['beta_mean'] = np.asarray(0.93)
 bounds = om.Bounds(lower=lower_bounds, upper=upper_bounds)
 
+print(start_params)
 start_time = time.time()
 
 res = om.minimize(criterion_func_sqr,start_params, algo_pounders, bounds=bounds, scaling=om.ScalingOptions(method='bounds', clipping_value=0.0001), logging=log_opts)

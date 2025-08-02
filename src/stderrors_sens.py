@@ -60,14 +60,15 @@ history = reader.read_history()
 min_ind = np.argmin(np.asarray(history.fun))
 min_params = history.params[min_ind]
 
-""" G_hat = om.first_derivative(simulate_moments, np.asarray(list(min_params.values())), method='forward', step_size=0.001)
+G_hat = om.first_derivative(simulate_moments, np.asarray(list(min_params.values())), method='forward', step_size=0.001)
 dbfile = open('G_hat', 'ab')
 pickle.dump(G_hat, dbfile)
-dbfile.close() """
+dbfile.close()
 
 dbfile = open('G_hat', 'rb')    
 G_hat = pickle.load(dbfile)
 G_hat = np.vstack([x for x in G_hat.derivative.values()])
+dbfile.close()
 print(G_hat)
 
 #G_hat_inv = np.linalg.inv(G_hat.derivative)

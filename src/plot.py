@@ -1,10 +1,9 @@
 import optimagic as om
-from model_function import simulate_moments
+from plotly.subplots import make_subplots
 import pandas as pd
 import numpy as np
 from jax import numpy as jnp
-from utils import retransform_params
-from model_function import simulate_moments, create_inputs
+import plotly.graph_objects as go
 
 ########################
 # Mahler & Yum Params  #
@@ -135,11 +134,300 @@ start_params = {'nuh_1':nuh_1, 'nuh_2':nuh_2, 'nuh_3':nuh_3, 'nuh_4':nuh_4,'nuu_
                 'ytHS_sq':ytHS_sq,'wagep_HS':wagep_HS,'wagep_CL':wagep_CL,'ytCL_s':ytCL_s,'ytCL_sq':ytCL_sq, 'sigx':sigx,
                 'chi_1': chi_1,'chi_2':chi_2, 'psi':psi, 'nuad':nuad, 'bb':11, 'conp':conp, 'penre':penre,
                 'beta_mean':beta_mean, 'beta_std':beta_std}
-fig = om.criterion_plot(['../optim_results/pd_tao_var_1_restart.db'], monotone=True)
+fig = om.criterion_plot(['../optim_results/pd_rand_2.db'], monotone=True)
 #fig.write_image("../plots/comp_algos.pdf")
-fig.show()
-""" reader = om.SQLiteLogReader('../optim_results/pd_tao_var_1.db')
+fig.show('firefox')
+reader = om.SQLiteLogReader('../optim_results/pd_rand_2.db')
 history = reader.read_history()
 min_ind = np.argmin(np.asarray(history.fun))
 min_params = history.params[min_ind]
-print(np.round(((simulate_moments(min_params)- empirical_moments)/empirical_moments)*100,decimals=3 )) """
+#print(np.round(((simulate_moments(min_params)- empirical_moments)/empirical_moments)*100,decimals=3 ))
+
+""" optimal_moments = simulate_moments(min_params)
+np.savetxt("optimal_moments.csv", optimal_moments, 
+              delimiter = ",") """
+optimal_moments = np.loadtxt("optimal_moments.csv")
+
+np.asarray(optimal_moments)
+emp_healthy = optimal_moments[0:4]
+emp_unhealthy = optimal_moments[4:8]
+
+fig = go.Figure()
+trace = go.Scatter(
+        x=['25-34', '35-44','45-54','55-64'],
+        y=emp_healthy,
+        name='Healthy',
+        mode="lines+markers",
+        marker={'size':6},
+        legendgroup='Model',
+        line_color='#1F77B4'
+)
+fig.add_trace(trace)
+trace2 = go.Scatter(
+        x=['25-34', '35-44','45-54','55-64'],
+        y=emp_unhealthy,
+        name='Unhealthy',
+        mode="lines+markers",
+        marker={'size':6},
+        legendgroup='Model',
+        legendgrouptitle_text='Model',
+        line_color='#FF7F0E'
+)
+fig.add_trace(trace2)
+trace3 = go.Scatter(
+        x=['25-34', '35-44','45-54','55-64'],
+        y=empirical_moments[0:4],
+        name='Healthy',
+        mode="lines+markers",
+        marker={'size':6},
+        marker_symbol= 'diamond',
+        legendgroup='Data',
+        line_dash='dot',
+        line_color='#1F77B4'
+        
+)
+fig.add_trace(trace3)
+trace4 = go.Scatter(
+        x=['25-34', '35-44','45-54','55-64'],
+        y=empirical_moments[4:8],
+        name='Unhealthy',
+        mode="lines+markers",
+        marker={'size':6},
+        marker_symbol= 'diamond',
+        legendgroup='Data',
+        legendgrouptitle_text='Data',
+        line_dash='dot',
+        line_color='#FF7F0E'
+)
+fig.add_trace(trace4)
+fig.update_layout(
+        template='simple_white',
+        xaxis_title_text="Age Group",
+        yaxis_title_text="Employment share",
+        yaxis_range=[0,1],
+        height=400,
+        width=800,
+)
+fig.write_image("../plots/emp.pdf")
+
+fig = make_subplots(cols=2, subplot_titles=['Non-college', 'College'])
+trace = go.Scatter(
+        x=['25-34', '35-44','45-54','55-64', '65-74','75-84'],
+        y=optimal_moments[8:14],
+        name='Healthy',
+        mode="lines+markers",
+        marker={'size':6},
+        legendgroup='Model',
+        line_color='#1F77B4'
+)
+fig.add_trace(trace,row=1, col=1)
+trace2 = go.Scatter(
+        x=['25-34', '35-44','45-54','55-64', '65-74','75-84'],
+        y=optimal_moments[14:20],
+        name='Unhealthy',
+        mode="lines+markers",
+        marker={'size':6},
+        legendgroup='Model',
+        legendgrouptitle_text='Model',
+        line_color='#FF7F0E'
+)
+fig.add_trace(trace2, row=1,col=1)
+trace3 = go.Scatter(
+        x=['25-34', '35-44','45-54','55-64', '65-74','75-84'],
+        y=empirical_moments[8:14],
+        name='Healthy',
+        mode="lines+markers",
+        marker={'size':6},
+        marker_symbol= 'diamond',
+        legendgroup='Data',
+        line_dash='dot',
+        line_color='#1F77B4'
+        
+)
+fig.add_trace(trace3,row=1, col=1)
+trace4 = go.Scatter(
+        x=['25-34', '35-44','45-54','55-64', '65-74','75-84'],
+        y=empirical_moments[14:20],
+        name='Unhealthy',
+        mode="lines+markers",
+        marker={'size':6},
+        marker_symbol= 'diamond',
+        legendgroup='Data',
+        legendgrouptitle_text='Data',
+        line_dash='dot',
+        line_color='#FF7F0E'
+)
+fig.add_trace(trace4,row=1, col=1)
+trace5 = go.Scatter(
+        x=['25-34', '35-44','45-54','55-64', '65-74','75-84'],
+        y=optimal_moments[20:26],
+        name='Healthy',
+        mode="lines+markers",
+        marker={'size':6},
+        legendgroup='Model',
+        line_color='#1F77B4'
+)
+fig.add_trace(trace5,row=1, col=2)
+trace6 = go.Scatter(
+        x=['25-34', '35-44','45-54','55-64', '65-74','75-84'],
+        y=optimal_moments[26:32],
+        name='Unhealthy',
+        mode="lines+markers",
+        marker={'size':6},
+        legendgroup='Model',
+        legendgrouptitle_text='Model',
+        line_color='#FF7F0E'
+)
+fig.add_trace(trace6, row=1,col=2)
+trace7 = go.Scatter(
+        x=['25-34', '35-44','45-54','55-64', '65-74','75-84'],
+        y=empirical_moments[20:26],
+        name='Healthy',
+        mode="lines+markers",
+        marker={'size':6},
+        marker_symbol= 'diamond',
+        legendgroup='Data',
+        line_dash='dot',
+        line_color='#1F77B4'
+        
+)
+fig.add_trace(trace7,row=1, col=2)
+trace8 = go.Scatter(
+        x=['25-34', '35-44','45-54','55-64', '65-74','75-84'],
+        y=empirical_moments[26:32],
+        name='Unhealthy',
+        mode="lines+markers",
+        marker={'size':6},
+        marker_symbol= 'diamond',
+        legendgroup='Data',
+        legendgrouptitle_text='Data',
+        line_dash='dot',
+        line_color='#FF7F0E'
+)
+fig.add_trace(trace8,row=1, col=2)
+fig.update_layout(
+        template='simple_white',
+        xaxis_title_text="Age Group",
+        yaxis_title_text="Effort",
+        xaxis2_title_text="Age Group",
+        yaxis2_title_text="Effort",
+        yaxis_range=[0.5,1],
+        yaxis2_range=[0.5,1],
+        height=400,
+        width=1200,
+)
+
+fig.write_image("../plots/eff.pdf", width=1000, height=400)
+
+fig = make_subplots(cols=2, subplot_titles=['Non-college', 'College'])
+trace = go.Scatter(
+        x=['25-34', '35-44','45-54','55-64'],
+        y=optimal_moments[46:50],
+        name='Healthy',
+        mode="lines+markers",
+        marker={'size':6},
+        legendgroup='Model',
+        line_color='#1F77B4'
+)
+fig.add_trace(trace,row=1, col=1)
+trace2 = go.Scatter(
+        x=['25-34', '35-44','45-54','55-64'],
+        y=optimal_moments[50:54],
+        name='Unhealthy',
+        mode="lines+markers",
+        marker={'size':6},
+        legendgroup='Model',
+        legendgrouptitle_text='Model',
+        line_color='#FF7F0E'
+)
+fig.add_trace(trace2, row=1,col=1)
+trace3 = go.Scatter(
+        x=['25-34', '35-44','45-54','55-64'],
+        y=empirical_moments[46:50],
+        name='Healthy',
+        mode="lines+markers",
+        marker={'size':6},
+        marker_symbol= 'diamond',
+        legendgroup='Data',
+        line_dash='dot',
+        line_color='#1F77B4'
+        
+)
+fig.add_trace(trace3,row=1, col=1)
+trace4 = go.Scatter(
+        x=['25-34', '35-44','45-54','55-64'],
+        y=empirical_moments[50:54],
+        name='Unhealthy',
+        mode="lines+markers",
+        marker={'size':6},
+        marker_symbol= 'diamond',
+        legendgroup='Data',
+        legendgrouptitle_text='Data',
+        line_dash='dot',
+        line_color='#FF7F0E'
+)
+fig.add_trace(trace4,row=1, col=1)
+trace5 = go.Scatter(
+        x=['25-34', '35-44','45-54','55-64', ],
+        y=optimal_moments[54:58],
+        name='Healthy',
+        mode="lines+markers",
+        showlegend=False,
+        marker={'size':6},
+        legendgroup='Model',
+        line_color='#1F77B4'
+)
+fig.add_trace(trace5,row=1, col=2)
+trace6 = go.Scatter(
+        x=['25-34', '35-44','45-54','55-64', ],
+        y=optimal_moments[58:62],
+        name='Unhealthy',
+        mode="lines+markers",
+        showlegend=False,
+        marker={'size':6},
+        legendgroup='Model',
+        legendgrouptitle_text='Model',
+        line_color='#FF7F0E'
+)
+fig.add_trace(trace6, row=1,col=2)
+trace7 = go.Scatter(
+        x=['25-34', '35-44','45-54','55-64', ],
+        y=empirical_moments[54:58],
+        name='Healthy',
+        mode="lines+markers",
+        showlegend=False,
+        marker={'size':6},
+        marker_symbol= 'diamond',
+        legendgroup='Data',
+        line_dash='dot',
+        line_color='#1F77B4'
+        
+)
+fig.add_trace(trace7,row=1, col=2)
+trace8 = go.Scatter(
+        x=['25-34', '35-44','45-54','55-64'],
+        y=empirical_moments[58:62],
+        name='Unhealthy',
+        showlegend=False,
+        mode="lines+markers",
+        marker={'size':6},
+        marker_symbol= 'diamond',
+        legendgroup='Data',
+        legendgrouptitle_text='Data',
+        line_dash='dot',
+        line_color='#FF7F0E'
+)
+fig.add_trace(trace8,row=1, col=2)
+fig.update_layout(
+        template='simple_white',
+        xaxis_title_text="Age Group",
+        yaxis_title_text="Labor Income (Ths.)",
+        xaxis2_title_text="Age Group",
+        yaxis2_title_text="Labor Income (Ths.)",
+        yaxis_range=[0,120],
+        yaxis2_range=[0,120],
+        height=400,
+        width=1200,
+)
+
+fig.write_image("../plots/inc.pdf", width=1000, height=400)

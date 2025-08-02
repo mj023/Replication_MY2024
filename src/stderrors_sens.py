@@ -55,20 +55,25 @@ moment_sd = np.asarray([0.0022079,0.001673,0.0015903,0.0024375,
         0.0015815 ])                     
 
 W_var = np.diag(1/moment_sd**2)
-reader = om.SQLiteLogReader('../optim_results/pd_var_1.db')
+reader = om.SQLiteLogReader('../optim_results/pd_rand_1.db')
 history = reader.read_history()
 min_ind = np.argmin(np.asarray(history.fun))
 min_params = history.params[min_ind]
 
-G_hat = om.first_derivative(simulate_moments, np.asarray(list(min_params.values())), method='forward', step_size=0.001)
+step_size = np.full((42),0.001)
+
+
+print(np.asarray(list(min_params.values())))
+G_hat = om.first_derivative(simulate_moments, min_params, method='forward', step_size=step_size)
 dbfile = open('G_hat', 'ab')
 pickle.dump(G_hat, dbfile)
 dbfile.close()
 
-dbfile = open('G_hat', 'rb')    
+""" dbfile = open('G_hat', 'rb')    
 G_hat = pickle.load(dbfile)
+
+dbfile.close() """
 G_hat = np.vstack([x for x in G_hat.derivative.values()])
-dbfile.close()
 print(G_hat)
 
 #G_hat_inv = np.linalg.inv(G_hat.derivative)

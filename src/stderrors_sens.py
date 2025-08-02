@@ -65,16 +65,10 @@ step_size = np.full((42),0.001)
 
 print(np.asarray(list(min_params.values())))
 G_hat = om.first_derivative(simulate_moments, min_params, method='forward', step_size=step_size)
-dbfile = open('G_hat', 'ab')
-pickle.dump(G_hat, dbfile)
-dbfile.close()
-
-""" dbfile = open('G_hat', 'rb')    
-G_hat = pickle.load(dbfile)
-
-dbfile.close() """
 G_hat = np.vstack([x for x in G_hat.derivative.values()])
-print(G_hat)
+np.savetxt('g_hat.txt', G_hat)
+
+
 
 #G_hat_inv = np.linalg.inv(G_hat.derivative)
 
@@ -89,7 +83,7 @@ for i in range(k):
     transf_jacob = np.zeros((1,k))
     transf_jacob[0,i] = 1
 
-    y = moment_jacob*(np.linalg.solve(GpG, moment_jacob.T))
+    y = moment_jacob@(np.linalg.solve(GpG, moment_jacob.T))
     moment_jacob_perp = linalg.null_space(moment_jacob.T)
     x = -moment_jacob_perp
 
@@ -97,3 +91,5 @@ for i in range(k):
     z = mod.fit(q=0.5)
     moment_loadings[:,i] = y-x*z
     param_ses[i,0] = moment_sd.T @ np.abs(moment_loadings[:,i])
+
+print(param_ses)

@@ -1,6 +1,8 @@
-import jax
+
 import jax.numpy as jnp
-import lcm
+
+import numpy as np
+from scipy.optimize import linprog
 
 def rouwenhorst(rho,sigma_eps,n):
 
@@ -41,4 +43,42 @@ def transform_params(params):
     return {name:jnp.log(value + 0.2) for name,value in params.items()}
 def retransform_params(params):
     return {name:jnp.exp(value)-0.2 for name,value in params.items()}
+
+
+def qreg(y, X, tau):
+    """
+    Quantile regression using linear programming.
+
+    Parameters:
+        y (numpy array): Outcome vector (n,)
+        X (numpy array): Predictor matrix (n, m)
+        tau (float): Quantile level (between 0 and 1)
+
+    Returns:
+        bhat (numpy array): Estimated regression coefficients (m,)
+    """
+
+    n, m = X.shape
+    print(m)
+    # Objective function: tau * u + (1 - tau) * v + 0 * beta
+    f = np.concatenate([tau * np.ones(n), (1 - tau) * np.ones(n), np.zeros(m)])
+
+    # Equality constraints: u - v + X*beta = y => A_eq @ z = y
+    A_eq = np.hstack([np.eye(n), -np.eye(n), X])
+    b_eq = y
+
+    # Bounds: u >= 0, v >= 0, beta unrestricted
+    bounds = [(0, None)] * n + [(0, None)] * n + [(None, None)] * m
+
+    # Solve linear program
+    res = linprog(c=f, A_eq=A_eq, b_eq=b_eq, bounds=bounds, method='highs')
+
+    if not res.success:
+        raise ValueError("Linear programming failed: " + res.message)
+
+    # Extract beta coefficients from solution vector
+    bhat = res.x[-m:]
+
+    return bhat
+
 

@@ -1,15 +1,13 @@
-import jax
+
 from jax import numpy as jnp
 import statsmodels.formula.api as smf
 from scipy import linalg
 import numpy as np
-import pickle
-import pandas as pd
 import optimagic as om
-from estimagic.estimate_msm import get_msm_optimization_functions
-from estimagic.msm_weighting import get_weighting_matrix
-import estimagic as em
 from model_function import simulate_moments
+
+from utils import qreg
+
 
 empirical_moments = np.asarray([0.6508581,0.7660204,0.8232445,0.6193264, 
         0.5055072,0.5830671,0.6008949,0.4091998,                                              
@@ -54,8 +52,16 @@ moment_sd = np.asarray([0.0022079,0.001673,0.0015903,0.0024375,
         0.0023382,                          
         0.0015815 ])                     
 
+param_order = ['nuh_1', 'nuh_2', 'nuh_3', 'nuh_4','nuu_1', 'nuu_2', 'nuu_3', 'nuu_4',  'nuad', 
+                'xiHSh_1','xiHSh_2','xiHSh_3','xiHSh_4','xiHSu_1','xiHSu_2',
+                'xiHSu_3','xiHSu_4','xiCLu_1','xiCLu_2','xiCLu_3','xiCLu_4',
+                'xiCLh_1','xiCLh_2','xiCLh_3','xiCLh_4','psi','y1_HS','ytHS_s','ytHS_sq','wagep_HS','y1_CL' ,
+                'ytCL_s','ytCL_sq','wagep_CL',
+                'chi_1' ,'chi_2','bb', 'conp', 'penre', 'sigx',
+                'beta_mean', 'beta_std']
+
 W_var = np.diag(1/moment_sd**2)
-reader = om.SQLiteLogReader('../optim_results/pd_rand_1.db')
+reader = om.SQLiteLogReader('../optim_results/pd_var_1.db')
 history = reader.read_history()
 min_ind = np.argmin(np.asarray(history.fun))
 min_params = history.params[min_ind]
@@ -64,13 +70,14 @@ step_size = np.full((42),0.001)
 
 
 print(np.asarray(list(min_params.values())))
-G_hat = om.first_derivative(simulate_moments, min_params, method='forward', step_size=step_size)
-G_hat = np.vstack([x for x in G_hat.derivative.values()])
+G_hat = om.first_derivative(simulate_moments, min_params, method='central', step_size=step_size)
+G_hat = np.vstack([G_hat.derivative[x] for x in param_order])
 np.savetxt('g_hat.txt', G_hat)
 
+G_hat = np.loadtxt('../results/g_hat.txt')
 
 
-#G_hat_inv = np.linalg.inv(G_hat.derivative)
+G_hat_inv = np.linalg.inv(G_hat @ W_var @ G_hat.T)
 
 moment_jacob = G_hat.T
 p,k = moment_jacob.shape
@@ -80,16 +87,18 @@ est_onestep = np.zeros((k,1))
 moment_loadings = np.zeros_like(moment_jacob)
 
 for i in range(k):
-    transf_jacob = np.zeros((1,k))
-    transf_jacob[0,i] = 1
-
-    y = moment_jacob@(np.linalg.solve(GpG, moment_jacob.T))
+    transf_jacob = np.zeros((k))
+    transf_jacob[i] = 1
+    y = moment_jacob@(np.linalg.solve(GpG, transf_jacob))
     moment_jacob_perp = linalg.null_space(moment_jacob.T)
     x = -moment_jacob_perp
-
-    mod = smf.quantreg('y~x', {'x':x, 'y':y})
-    z = mod.fit(q=0.5)
-    moment_loadings[:,i] = y-x*z
+    print(x.shape)
+    z = qreg(moment_sd*y,np.expand_dims(moment_sd, axis=1)*x,0.5)
+    moment_loadings[:,i] = y-x@z
     param_ses[i,0] = moment_sd.T @ np.abs(moment_loadings[:,i])
 
 print(param_ses)
+np.savetxt('../results/param_ses.txt', param_ses)
+sens = -G_hat_inv @ G_hat @ W_var
+np.savetxt('../results/sens.txt', sens)
+print(sens[0,:])

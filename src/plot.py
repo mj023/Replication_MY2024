@@ -4,10 +4,16 @@ import pandas as pd
 import numpy as np
 from jax import numpy as jnp
 import plotly.graph_objects as go
+from model_function import simulate_moments
+
+from matplotlib import pyplot as plt
+from matplotlib.patches import Rectangle
+import seaborn as sns
 
 ########################
 # Mahler & Yum Params  #
 ########################
+winit = jnp.array([43978,48201])
 
 nuh_1 = 2.63390750888379
 nuh_2 = 1.66602983591164
@@ -127,17 +133,17 @@ empirical_moments = np.asarray([0.6508581,0.7660204,0.8232445,0.6193264,
         50.38816, 66.25301, 78.31755, 63.1325,    
         0.5952184,                           
         0.4770515 ])
-start_params = {'nuh_1':nuh_1, 'nuh_2':nuh_2, 'nuh_3':nuh_3, 'nuh_4':nuh_4,'nuu_1':nuu_1, 'nuu_2':nuu_2, 'nuu_3': nuu_3, 'nuu_4':nuu_4,
+start_params = {'nuh_1':nuh_1, 'nuh_2':nuh_2, 'nuh_3':nuh_3, 'nuh_4':nuh_4,'nuu_1':nuu_1, 'nuu_2':nuu_2, 'nuu_3': nuu_3, 'nuu_4':nuu_4,  'nuad':nuad, 
                 'xiHSh_1':xiHSh_1,'xiHSh_2':xiHSh_2,'xiHSh_3':xiHSh_3,'xiHSh_4':xiHSh_4,'xiHSu_1':xiHSu_1,'xiHSu_2':xiHSu_2,
                 'xiHSu_3':xiHSu_3,'xiHSu_4':xiHSu_4,'xiCLu_1':xiCLu_1,'xiCLu_2':xiCLu_2,'xiCLu_3':xiCLu_3,'xiCLu_4':xiCLu_4,
-                'xiCLh_1':xiCLh_1,'xiCLh_2':xiCLh_2,'xiCLh_3':xiCLh_3,'xiCLh_4':xiCLh_4,'y1_HS':y1_HS,'y1_CL': y1_CL,'ytHS_s':ytHS_s,
-                'ytHS_sq':ytHS_sq,'wagep_HS':wagep_HS,'wagep_CL':wagep_CL,'ytCL_s':ytCL_s,'ytCL_sq':ytCL_sq, 'sigx':sigx,
-                'chi_1': chi_1,'chi_2':chi_2, 'psi':psi, 'nuad':nuad, 'bb':11, 'conp':conp, 'penre':penre,
+                'xiCLh_1':xiCLh_1,'xiCLh_2':xiCLh_2,'xiCLh_3':xiCLh_3,'xiCLh_4':xiCLh_4,'y1_HS':y1_HS,'ytHS_s':ytHS_s,'ytHS_sq':ytHS_sq,'wagep_HS':wagep_HS,'y1_CL': y1_CL,
+                'ytCL_s':ytCL_s,'ytCL_sq':ytCL_sq,'wagep_CL':wagep_CL, 'sigx':sigx,
+                'chi_1': chi_1,'chi_2':chi_2, 'psi':psi,'bb':11, 'conp':conp, 'penre':penre,
                 'beta_mean':beta_mean, 'beta_std':beta_std}
-fig = om.criterion_plot(['../optim_results/pd_rand_2.db'], monotone=True)
+fig = om.criterion_plot(['../optim_results/pd_rand_1.db'], monotone=True)
 #fig.write_image("../plots/comp_algos.pdf")
 fig.show('firefox')
-reader = om.SQLiteLogReader('../optim_results/pd_rand_2.db')
+reader = om.SQLiteLogReader('../optim_results/pd_rand_1.db')
 history = reader.read_history()
 min_ind = np.argmin(np.asarray(history.fun))
 min_params = history.params[min_ind]
@@ -205,10 +211,9 @@ fig.update_layout(
         xaxis_title_text="Age Group",
         yaxis_title_text="Employment share",
         yaxis_range=[0,1],
-        height=400,
-        width=800,
 )
-fig.write_image("../plots/emp.pdf")
+fig.write_image("../plots/emp.pdf",height=400,
+        width=500,)
 
 fig = make_subplots(cols=2, subplot_titles=['Non-college', 'College'])
 trace = go.Scatter(
@@ -240,6 +245,7 @@ trace3 = go.Scatter(
         marker={'size':6},
         marker_symbol= 'diamond',
         legendgroup='Data',
+        showlegend=False,
         line_dash='dot',
         line_color='#1F77B4'
         
@@ -253,6 +259,7 @@ trace4 = go.Scatter(
         marker={'size':6},
         marker_symbol= 'diamond',
         legendgroup='Data',
+        showlegend=False,
         legendgrouptitle_text='Data',
         line_dash='dot',
         line_color='#FF7F0E'
@@ -264,6 +271,7 @@ trace5 = go.Scatter(
         name='Healthy',
         mode="lines+markers",
         marker={'size':6},
+        showlegend=False,
         legendgroup='Model',
         line_color='#1F77B4'
 )
@@ -274,6 +282,7 @@ trace6 = go.Scatter(
         name='Unhealthy',
         mode="lines+markers",
         marker={'size':6},
+        showlegend=False,
         legendgroup='Model',
         legendgrouptitle_text='Model',
         line_color='#FF7F0E'
@@ -313,11 +322,10 @@ fig.update_layout(
         yaxis2_title_text="Effort",
         yaxis_range=[0.5,1],
         yaxis2_range=[0.5,1],
-        height=400,
-        width=1200,
 )
 
-fig.write_image("../plots/eff.pdf", width=1000, height=400)
+fig.write_image("../plots/eff.pdf", height=400,
+        width=1000)
 
 fig = make_subplots(cols=2, subplot_titles=['Non-college', 'College'])
 trace = go.Scatter(
@@ -426,8 +434,62 @@ fig.update_layout(
         yaxis2_title_text="Labor Income (Ths.)",
         yaxis_range=[0,120],
         yaxis2_range=[0,120],
-        height=400,
-        width=1200,
 )
 
-fig.write_image("../plots/inc.pdf", width=1000, height=400)
+fig.write_image("../plots/inc.pdf", height=400,
+        width=1000,)
+
+fig = go.Figure()
+trace = go.Scatter(
+        x=['25-34', '35-44','45-54','55-64', '65-74','75-84'],
+        y=(optimal_moments[32:38]*winit[1])/1000,
+        name='Model',
+        mode="lines+markers",
+        marker={'size':6},
+        legendgroup='Model',
+        line_color='#1F77B4'
+)
+fig.add_trace(trace)
+trace2 = go.Scatter(
+        x=['25-34', '35-44','45-54','55-64', '65-74','75-84'],
+        y=(empirical_moments[32:38]*winit[1])/1000,
+        name='Data',
+        marker_symbol= 'diamond',
+        line_dash='dot',
+        mode="lines+markers",
+        marker={'size':6},
+        line_color='#1F77B4'
+)
+fig.add_trace(trace2)
+fig.update_layout(
+        template='simple_white',
+        xaxis_title_text="Age Group",
+        yaxis_title_text="Wealth (Ths.)",
+        yaxis_range=[0,120],
+)
+
+fig.write_image("../plots/wealth.pdf",    height=400,
+        width=500,)
+
+sensitivity_data = (np.abs(np.loadtxt('../results/sens.txt')))
+
+labels_disw = [r'$\nu_{1}^{h=1}$',r'$\nu_{8}^{h=1}$',r'$\nu_{13}^{h=1}$',r'$\nu_{20}^{h=1}$',r'$\nu_{1}^{h=0}$',r'$\nu_{8}^{h=0}$',r'$\nu_{13}^{h=0}$',r'$\nu_{20}^{h=0}$',r'$\nu_{e}$',]
+labels_diseff = [r'$\xi_{1}^{h=1,e=0}$',r'$\xi_{12}^{h=1,e=0}$',r'$\xi_{20}^{h=1,e=0}$',r'$\xi_{31}^{h=1,e=0}$',r'$\xi_{1}^{h=0,e=0}$',r'$\xi_{12}^{h=0,e=0}$',r'$\xi_{20}^{h=0,e=0}$',r'$\xi_{31}^{h=0,e=0}$',r'$\xi_{1}^{h=1,e=1}$',r'$\xi_{12}^{h=1,e=1}$',r'$\xi_{20}^{h=1,e=1}$',r'$\xi_{31}^{h=1,e=1}$',r'$\xi_{1}^{h=0,e=1}$',r'$\xi_{12}^{h=0,e=1}$',r'$\xi_{20}^{h=0,e=1}$',r'$\xi_{31}^{h=0,e=1}$',r'$\psi$',]
+labels_inc = [r'$\zeta_{0}^{e=0}$',r'$\zeta_{1}^{e=0}$',r'$\zeta_{2}^{e=0}$',r'$w_{p}^{e=0}$',r'$\zeta_{0}^{e=1}$',r'$\zeta_{1}^{e=1}$',r'$\zeta_{2}^{e=1}$',r'$w_{p}^{e=1}$',]
+sns.set_theme( rc={'text.usetex' : True})
+fig, axes = plt.subplots(2, 2, figsize=(15, 5))
+sns.heatmap(ax=axes[0,0],data=sensitivity_data[:9,:],  cmap='viridis', linewidths=.5
+                 )
+axes[0,0].set_yticklabels( labels=labels_disw,rotation=0)
+axes[0,0].add_patch(Rectangle((0, 0), 8, 8, fill=False, edgecolor='crimson', lw=3, clip_on=False))
+sns.heatmap(ax=axes[0,1],data=sensitivity_data[9:26,:], cmap='viridis', linewidths=.5,yticklabels=labels_diseff
+                 )
+axes[0,1].add_patch(Rectangle((9, 0), 24, 16, fill=False, edgecolor='crimson', lw=3, clip_on=False))
+
+sns.heatmap(ax=axes[1,0],data=sensitivity_data[26:34,:], cmap='viridis', linewidths=.5,yticklabels=labels_inc
+                 )
+axes[1,0].add_patch(Rectangle((34, 0), 8, 8, fill=False, edgecolor='crimson', lw=3, clip_on=False))
+
+sns.heatmap(ax=axes[1,1],data=sensitivity_data[34:,:], cmap='viridis', linewidths=.5,
+                 )
+plt.show()

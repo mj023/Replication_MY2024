@@ -114,7 +114,7 @@ start_params = {'nuh_1':nuh_1, 'nuh_2':nuh_2, 'nuh_3':nuh_3, 'nuh_4':nuh_4,'nuu_
                 'xiHSu_3':xiHSu_3,'xiHSu_4':xiHSu_4,'xiCLu_1':xiCLu_1,'xiCLu_2':xiCLu_2,'xiCLu_3':xiCLu_3,'xiCLu_4':xiCLu_4,
                 'xiCLh_1':xiCLh_1,'xiCLh_2':xiCLh_2,'xiCLh_3':xiCLh_3,'xiCLh_4':xiCLh_4,'y1_HS':y1_HS,'y1_CL': y1_CL,'ytHS_s':ytHS_s,
                 'ytHS_sq':ytHS_sq,'wagep_HS':wagep_HS,'wagep_CL':wagep_CL,'ytCL_s':ytCL_s,'ytCL_sq':ytCL_sq, 'sigx':sigx,
-                'chi_1': chi_1,'chi_2':chi_2, 'psi':psi, 'nuad':nuad, 'bb':10, 'conp':conp, 'penre':penre,
+                'chi_1': chi_1,'chi_2':chi_2, 'psi':psi, 'nuad':nuad, 'bb':9, 'conp':conp, 'penre':penre,
                 'beta_mean':beta_mean, 'beta_std':beta_std}
 empirical_moments = np.asarray([0.6508581,0.7660204,0.8232445,0.6193264, 
         0.5055072,0.5830671,0.6008949,0.4091998,                                              
@@ -207,12 +207,12 @@ upper_bounds = {'nuh_1':4, 'nuh_2':4, 'nuh_3':4, 'nuh_4':4,'nuu_1':4, 'nuu_2':4,
                 'chi_1': 0.01,'chi_2':0.3, 'psi':2, 'nuad':1.5, 'bb':15, 'conp':1, 'penre':0.6,
                 'beta_mean':1.05, 'beta_std':0.09}
 
-for i in range(42):
+""" for i in range(42):
     start_params[start_params_keys[i]] = np.asarray(start_params[start_params_keys[i]] + start_params[start_params_keys[i]]*(vals[i]-0.2))
     lower_bounds[start_params_keys[i]] = np.asarray(lower_bounds[start_params_keys[i]])
     upper_bounds[start_params_keys[i]] = np.asarray(upper_bounds[start_params_keys[i]])
 start_params['conp'] = np.asarray(0.9)
-start_params['beta_mean'] = np.asarray(0.93)
+start_params['beta_mean'] = np.asarray(0.93) """
 bounds = om.Bounds(lower=lower_bounds, upper=upper_bounds)
 
 print(start_params)

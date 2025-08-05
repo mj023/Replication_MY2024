@@ -4,8 +4,8 @@ import statsmodels.formula.api as smf
 from scipy import linalg
 import numpy as np
 import optimagic as om
-from model_function import simulate_moments
-
+from model_function import simulate_moments, simulate_moments_boot
+import pandas as pd
 from utils import qreg
 
 
@@ -61,7 +61,8 @@ param_order = ['nuh_1', 'nuh_2', 'nuh_3', 'nuh_4','nuu_1', 'nuu_2', 'nuu_3', 'nu
                 'beta_mean', 'beta_std']
 
 W_var = np.diag(1/moment_sd**2)
-reader = om.SQLiteLogReader('../optim_results/pd_var_1.db')
+W_ones = np.diag(np.ones(64))
+reader = om.SQLiteLogReader('../optim_results/pd_var_2.db')
 history = reader.read_history()
 min_ind = np.argmin(np.asarray(history.fun))
 min_params = history.params[min_ind]
@@ -70,9 +71,9 @@ step_size = np.full((42),0.001)
 
 
 print(np.asarray(list(min_params.values())))
-G_hat = om.first_derivative(simulate_moments, min_params, method='central', step_size=step_size)
+""" G_hat = om.first_derivative(simulate_moments, min_params, method='central', step_size=step_size)
 G_hat = np.vstack([G_hat.derivative[x] for x in param_order])
-np.savetxt('g_hat.txt', G_hat)
+np.savetxt('g_hat.txt', G_hat) """
 
 G_hat = np.loadtxt('../results/g_hat.txt')
 
@@ -101,4 +102,23 @@ print(param_ses)
 np.savetxt('../results/param_ses.txt', param_ses)
 sens = -G_hat_inv @ G_hat @ W_var
 np.savetxt('../results/sens.txt', sens)
-print(sens[0,:])
+
+labels_disw = [r'$\nu_{1}^{h=1}$',r'$\nu_{8}^{h=1}$',r'$\nu_{13}^{h=1}$',r'$\nu_{20}^{h=1}$',r'$\nu_{1}^{h=0}$',r'$\nu_{8}^{h=0}$',r'$\nu_{13}^{h=0}$',r'$\nu_{20}^{h=0}$',r'$\nu_{e}$',]
+labels_diseff = [r'$\xi_{1}^{h=1,e=0}$',r'$\xi_{12}^{h=1,e=0}$',r'$\xi_{20}^{h=1,e=0}$',r'$\xi_{31}^{h=1,e=0}$',r'$\xi_{1}^{h=0,e=0}$',r'$\xi_{12}^{h=0,e=0}$',r'$\xi_{20}^{h=0,e=0}$',r'$\xi_{31}^{h=0,e=0}$',r'$\xi_{1}^{h=1,e=1}$',r'$\xi_{12}^{h=1,e=1}$',r'$\xi_{20}^{h=1,e=1}$',r'$\xi_{31}^{h=1,e=1}$',r'$\xi_{1}^{h=0,e=1}$',r'$\xi_{12}^{h=0,e=1}$',r'$\xi_{20}^{h=0,e=1}$',r'$\xi_{31}^{h=0,e=1}$',r'$\psi$',]
+labels_inc = [r'$\zeta_{0}^{e=0}$',r'$\zeta_{1}^{e=0}$',r'$\zeta_{2}^{e=0}$',r'$w_{p}^{e=0}$',r'$\zeta_{0}^{e=1}$',r'$\zeta_{1}^{e=1}$',r'$\zeta_{2}^{e=1}$',r'$w_{p}^{e=1}$',]
+labels_other = [r'$\chi_{1}$',r'$\chi_{2}$',r'$b$', r'$\kappa$', r'$\omega$', r'$\sigma_{z}$', r'$\mu_{\beta}$',r'$\sigma_{\beta}$']
+parameters = pd.DataFrame()
+parameters['Parameter'] = labels_disw + labels_diseff 
+
+parameters['Estimate'] = [min_params[x] for x in param_order[:26]]
+
+parameters['Std. Error'] = param_ses[:26]
+parameters['Parameter2'] = labels_inc + labels_other +['' for x in range(10)]
+parameters['Estimate2'] = [min_params[x] for x in param_order[26:]]+[1.0 for x in range(10)]
+ses = np.ones((26,1))
+ses[:16] = param_ses[26:]
+parameters['Std. Error2'] = ses
+print(parameters.to_latex(index=False))
+
+optim_moments = simulate_moments_boot(min_params)
+np.savetxt('../results/optim_moments_boot.txt', optim_moments)

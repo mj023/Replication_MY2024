@@ -234,9 +234,9 @@ def simulate_moments(params):
         non_adjusters = (res.loc[(res['_period'] >= (interval*10)) & (res['_period'] < ((interval+1)*10)) & (res['alive'] == 1) & (res['effort'] == res['effort_t_1'])].count())/ (res.loc[(res['_period'] >= (interval*10)) & (res['_period'] < ((interval+1)*10)) & (res['alive'] == 1)].count())
         moments[interval+39] = non_adjusters.iloc[0]
     avg_kappa = ((res.loc[(res['health']==1) & (res['alive']==1)].count()) + (res.loc[(res['health']==0) & (res['alive']==1)].count())*params['conp'])/(res.loc[ (res['alive']==1)].count())
-    avg_cons = res['cnow'].mean()
+    avg_cons = res.loc[res['alive']==1,'cnow'].mean()
     res.loc[res['discount_factor']==0, 'discount_factor'] == -1
-    corrected_util = res['utility']/((params['beta_mean']+(params['beta_std']*res['discount_factor']))**res['_period'])
+    corrected_util = res.loc[res['alive']==1,'utility']/((params['beta_mean']+(params['beta_std']*res.loc[res['alive']==1,'discount_factor']))**res.loc[res['alive']==1,'_period'])
     avg_utility = corrected_util.mean()
     vsly = avg_utility / avg_kappa.iloc[0]*(avg_cons**-2)
     moments[42] = vsly

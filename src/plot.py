@@ -9,6 +9,14 @@ from model_function import simulate_moments
 from matplotlib import pyplot as plt
 from matplotlib.patches import Rectangle
 import seaborn as sns
+import textwrap
+def wrap_labels(ax, width, break_long_words=False):
+    labels = []
+    for label in ax.get_xticklabels():
+        text = label.get_text()
+        labels.append(textwrap.fill(text, width=width,
+                      break_long_words=break_long_words))
+    ax.set_xticklabels(labels, rotation=-45, ha='left')
 
 ########################
 # Mahler & Yum Params  #
@@ -140,9 +148,12 @@ start_params = {'nuh_1':nuh_1, 'nuh_2':nuh_2, 'nuh_3':nuh_3, 'nuh_4':nuh_4,'nuu_
                 'ytCL_s':ytCL_s,'ytCL_sq':ytCL_sq,'wagep_CL':wagep_CL, 'sigx':sigx,
                 'chi_1': chi_1,'chi_2':chi_2, 'psi':psi,'bb':11, 'conp':conp, 'penre':penre,
                 'beta_mean':beta_mean, 'beta_std':beta_std}
-""" fig = om.params_plot('../optim_results/pd_var_2.db')
-#fig.write_image("../plots/comp_algos.pdf")
-fig.show('firefox') """
+fig = om.criterion_plot({'POUNDerS':'../optim_results/pd_var_2_test.db','Nelder-Mead':'../optim_results/nm_var_1_real.db'},palette=['#FF7F0E', '#1F77B4'], monotone=True, max_evaluations=1500)
+fig.update_layout(
+        margin=dict(l=20, r=20, t=0, b=60),
+)
+fig.write_image("../plots/comp_algos.pdf")
+fig.show('firefox')
 reader = om.SQLiteLogReader('../optim_results/pd_rand_1.db')
 history = reader.read_history()
 min_ind = np.argmin(np.asarray(history.fun))
@@ -212,7 +223,7 @@ fig.update_layout(
         xaxis_title_text="Age Group",
         yaxis_title_text="Employment share",
         yaxis_range=[0,1],
-        margin=dict(l=20, r=20, t=20, b=80),
+        margin=dict(l=20, r=20, t=0, b=60),
         height= 200,
         width= 400
 
@@ -325,12 +336,12 @@ fig.update_layout(
         yaxis_title_text="Effort",
         xaxis2_title_text="Age Group",
         yaxis2_title_text="Effort",
-        yaxis_range=[0.5,1],
-        yaxis2_range=[0.5,1],
+        yaxis_range=[0.5,0.9],
+        yaxis2_range=[0.5,0.9],
         margin=dict(l=20, r=20, t=20, b=80),
 )
 
-fig.write_image("../plots/eff.pdf", height=400,
+fig.write_image("../plots/eff.pdf", height=300,
         width=1000)
 
 fig = make_subplots(cols=2, subplot_titles=['Non-college', 'College'])
@@ -482,9 +493,9 @@ fig.write_image("../plots/wealth.pdf",    height=300,
         width=400,)
 
 sensitivity_data = np.abs(np.loadtxt('../results/sens.txt'))
-emp = np.expand_dims(np.average(sensitivity_data[:,0:8], axis=1),axis=1)
-eff = np.expand_dims(np.average(sensitivity_data[:,8:32], axis=1),axis=1)
-inc = np.expand_dims(np.average(sensitivity_data[:,46:62], axis=1),axis=1)
+emp = np.expand_dims(np.max(sensitivity_data[:,0:8], axis=1),axis=1)
+eff = np.expand_dims(np.max(sensitivity_data[:,8:32], axis=1),axis=1)
+inc = np.expand_dims(np.max(sensitivity_data[:,46:62], axis=1),axis=1)
 wealth = np.expand_dims(np.average(sensitivity_data[:,32:38], axis=1),axis=1)
 non_adj = np.expand_dims(np.average(sensitivity_data[:,39:42], axis=1),axis=1)
 other = sensitivity_data[:,[38,42,43,44,45,62,63]]
@@ -495,9 +506,9 @@ indexes = np.asarray(list(np.arange(0,47)) + list(np.arange(61,64)))
 labels_disw = [r'$\nu_{1}^{h=1}$',r'$\nu_{8}^{h=1}$',r'$\nu_{13}^{h=1}$',r'$\nu_{20}^{h=1}$',r'$\nu_{1}^{h=0}$',r'$\nu_{8}^{h=0}$',r'$\nu_{13}^{h=0}$',r'$\nu_{20}^{h=0}$',r'$\nu_{e}$',]
 labels_diseff = [r'$\xi_{1}^{h=1,e=0}$',r'$\xi_{12}^{h=1,e=0}$',r'$\xi_{20}^{h=1,e=0}$',r'$\xi_{31}^{h=1,e=0}$',r'$\xi_{1}^{h=0,e=0}$',r'$\xi_{12}^{h=0,e=0}$',r'$\xi_{20}^{h=0,e=0}$',r'$\xi_{31}^{h=0,e=0}$',r'$\xi_{1}^{h=1,e=1}$',r'$\xi_{12}^{h=1,e=1}$',r'$\xi_{20}^{h=1,e=1}$',r'$\xi_{31}^{h=1,e=1}$',r'$\xi_{1}^{h=0,e=1}$',r'$\xi_{12}^{h=0,e=1}$',r'$\xi_{20}^{h=0,e=1}$',r'$\xi_{31}^{h=0,e=1}$',r'$\psi$',]
 labels_inc = [r'$\zeta_{0}^{e=0}$',r'$\zeta_{1}^{e=0}$',r'$\zeta_{2}^{e=0}$',r'$w_{p}^{e=0}$',r'$\zeta_{0}^{e=1}$',r'$\zeta_{1}^{e=1}$',r'$\zeta_{2}^{e=1}$',r'$w_{p}^{e=1}$',]
-labels_other = [r'$\chi_{1}$',r'$\chi_{2}$', r'$b$', r'$\kappa$', r'$\omega$', r'$\sigma_{z}$', r'$\mu_{\beta}$',r'$\sigma_{\beta}$']
+labels_other = [r'$\chi_{0}$',r'$\chi_{1}$', r'$b$', r'$\kappa$', r'$\omega$', r'$\sigma_{z}$', r'$\mu_{\beta}$',r'$\sigma_{\beta}$']
 sns.set_theme( rc={'text.usetex' : True, 'figure.figsize':(15,12)})
-ax = sns.heatmap(data=sensitivity_data_perc, linewidths=.3,linecolor='black',fmt='.1f',annot=sensitivity_data,cmap=sns.light_palette("seagreen", as_cmap=True),cbar_kws={'label': r'$\%$ of Sum of Sensitivities'}
+ax = sns.heatmap(data=sensitivity_data_perc, linewidths=.3,linecolor='black',fmt='.1f',annot=sensitivity_data,cmap=sns.light_palette("#1F77B4", as_cmap=True),cbar_kws={'label': r'$\%$ of Sum of Sensitivities'}
                  )
 
 ax.set_yticklabels(labels_disw+labels_diseff+labels_inc+labels_other,rotation=0)
@@ -516,7 +527,8 @@ ax.add_patch(Rectangle((3, 40), 1, 1, fill=False, edgecolor='crimson', lw=3, cli
 ax.add_patch(Rectangle((8, 41), 1, 1, fill=False, edgecolor='crimson', lw=3, clip_on=False))
 
 ax.set_xticks(np.arange(12)+0.5)
-ax.set_xticklabels(['Avg. Employment', 'Avg. Effort','Avg. Income', 'Med. Wealth', 'Non-Adjusters','Employment Grad.', 'VSLY/c', 'Std. Eff.', 'Wealth Gini','Cons. Ratio','Var. Log. Income','Pension Repl.' ], rotation=-45, ha='left')
+ax.set_xticklabels(['Avg. Employment (MAX)', 'Avg. Effort (MAX)','Avg. Income (MAX)', 'Med. Wealth (AVG)', 'Non-Adjusters (AVG)','Employment Grad.', r'$VSLY/\hat c$', 'Std. Eff.', 'Wealth Gini','Cons. Ratio','Var. Log. Income','Pension Repl.' ], rotation=-45, ha='left')
+wrap_labels(ax,15)
 plt.savefig('../plots/sens.pdf', bbox_inches='tight')
 plt.show()
 

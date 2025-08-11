@@ -62,7 +62,7 @@ param_order = ['nuh_1', 'nuh_2', 'nuh_3', 'nuh_4','nuu_1', 'nuu_2', 'nuu_3', 'nu
 
 W_var = np.diag(1/moment_sd**2)
 W_ones = np.diag(np.ones(64))
-reader = om.SQLiteLogReader('../optim_results/pd_var_2.db')
+reader = om.SQLiteLogReader('../optim_results/pd_var_2_real.db')
 history = reader.read_history()
 min_ind = np.argmin(np.asarray(history.fun))
 min_params = history.params[min_ind]
@@ -75,7 +75,7 @@ print(np.asarray(list(min_params.values())))
 G_hat = np.vstack([G_hat.derivative[x] for x in param_order])
 np.savetxt('g_hat.txt', G_hat) """
 
-G_hat = np.loadtxt('../results/g_hat.txt')
+G_hat = np.loadtxt('../results/g_hat_2.txt')
 
 
 G_hat_inv = np.linalg.inv(G_hat @ W_var @ G_hat.T)
@@ -108,17 +108,15 @@ labels_diseff = [r'$\xi_{1}^{h=1,e=0}$',r'$\xi_{12}^{h=1,e=0}$',r'$\xi_{20}^{h=1
 labels_inc = [r'$\zeta_{0}^{e=0}$',r'$\zeta_{1}^{e=0}$',r'$\zeta_{2}^{e=0}$',r'$w_{p}^{e=0}$',r'$\zeta_{0}^{e=1}$',r'$\zeta_{1}^{e=1}$',r'$\zeta_{2}^{e=1}$',r'$w_{p}^{e=1}$',]
 labels_other = [r'$\chi_{1}$',r'$\chi_{2}$',r'$b$', r'$\kappa$', r'$\omega$', r'$\sigma_{z}$', r'$\mu_{\beta}$',r'$\sigma_{\beta}$']
 parameters = pd.DataFrame()
-parameters['Parameter'] = labels_disw + labels_diseff 
+parameters['Parameter'] = labels_disw + labels_diseff[:12]
 
-parameters['Estimate'] = [min_params[x] for x in param_order[:26]]
+parameters['Estimate'] = np.round(np.asarray([min_params[x] for x in param_order[:21]]), 5)
 
-parameters['Std. Error'] = param_ses[:26]
-parameters['Parameter2'] = labels_inc + labels_other +['' for x in range(10)]
-parameters['Estimate2'] = [min_params[x] for x in param_order[26:]]+[1.0 for x in range(10)]
-ses = np.ones((26,1))
-ses[:16] = param_ses[26:]
-parameters['Std. Error2'] = ses
-print(parameters.to_latex(index=False))
+parameters['Std. Error'] = param_ses[:21]
+parameters['Parameter2'] = labels_diseff[12:]+ labels_inc + labels_other
+parameters['Estimate2'] = np.round(np.asarray([min_params[x] for x in param_order[21:]]), 5)
+parameters['Std. Error2'] = param_ses[21:]
+print(parameters.to_latex(index=False, float_format="%.5f"))
 
-optim_moments = simulate_moments_boot(min_params)
-np.savetxt('../results/optim_moments_boot.txt', optim_moments)
+""" optim_moments = simulate_moments_boot(min_params)
+np.savetxt('../results/optim_moments_boot.txt', optim_moments) """

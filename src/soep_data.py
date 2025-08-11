@@ -5,13 +5,13 @@ import pandas as pd
 import numpy as np
 from jax import numpy as jnp
 import plotly.graph_objects as go
-from model_function import simulate_wealth
+from model_function import simulate_wealth,simulate_moments
 # Set working directory
 path = '/home/mj023/Downloads/Soep/SOEP_V38'
 os.chdir(f"{path}")
 
 # Load raw data
-
+winit = jnp.array([43978,48201])
 pl = pd.read_stata("pl_clean.dta")
 gather_frame = []
 
@@ -104,26 +104,58 @@ wealth_h = [wealth_1_h,wealth_2_h,wealth_3_h,wealth_4_h,wealth_5_h]
 wealth_uh = [wealth_1_u,wealth_2_u,wealth_3_u,wealth_4_u,wealth_5_u]
 path = '/home/mj023/Git/Econ_RL/src'
 os.chdir(f"{path}")
+
+reader = om.SQLiteLogReader('../optim_results/pd_var_2_real.db')
+history = reader.read_history()
+min_ind = np.argmin(np.asarray(history.fun))
+min_params = history.params[min_ind]
+wealth = simulate_wealth(min_params)
+
 fig = go.Figure()
-trace = go.Scatter(
+trace3 = go.Scatter(
         x=['35-44','45-54','55-64', '65-74','75-84'],
-        y=(np.asarray(wealth_h))/1000,
-        name='Model',
+        y=(wealth[0:5]*winit[1])/1000,
+        name='Healthy',
         mode="lines+markers",
         marker={'size':6},
         legendgroup='Model',
-        line_color='#1F77B4'
+        line_color='#1F77B4',
+)
+fig.add_trace(trace3)
+trace4 = go.Scatter(
+        x=['35-44','45-54','55-64', '65-74','75-84'],
+        y=(wealth[5:]*winit[1])/1000,
+        name='Unhealthy',
+        mode="lines+markers",
+        marker={'size':6},
+        legendgrouptitle_text='Model',
+        line_color='#FF7F0E',
+        legendgroup='Model',
+)
+fig.add_trace(trace4)
+trace = go.Scatter(
+        x=['35-44','45-54','55-64', '65-74','75-84'],
+        y=(np.asarray(wealth_h))/1000,
+        name='Healthy',
+        marker_symbol= 'diamond',
+        mode="lines+markers",
+        marker={'size':6},
+        legendgroup='Data',
+        line_dash='dot',
+        line_color='#1F77B4',
 )
 fig.add_trace(trace)
 trace2 = go.Scatter(
         x=['35-44','45-54','55-64', '65-74','75-84'],
         y=(np.asarray(wealth_uh))/1000,
-        name='Data',
+        name='Unhealthy',
         marker_symbol= 'diamond',
         line_dash='dot',
         mode="lines+markers",
+        legendgrouptitle_text='Data',
         marker={'size':6},
-        line_color='#1F77B4'
+        line_color='#FF7F0E',
+        legendgroup='Data',
 )
 fig.add_trace(trace2)
 fig.update_layout(
@@ -139,8 +171,37 @@ fig.update_layout(
 fig.write_image("../plots/wealthgaps.pdf",    height=300,
         width=400,)
 
-reader = om.SQLiteLogReader('../optim_results/pd_var_2.db')
-history = reader.read_history()
-min_ind = np.argmin(np.asarray(history.fun))
-min_params = history.params[min_ind]
-print(simulate_wealth(min_params))
+fig = go.Figure()
+trace3 = go.Scatter(
+        x=['35-44','45-54','55-64', '65-74','75-84'],
+        y=((wealth[0:5]*winit[1])/1000)/((wealth[5:]*winit[1])/1000),
+        name='Model',
+        mode="lines+markers",
+        marker={'size':6},
+        legendgroup='Model',
+        line_color='#1F77B4',
+)
+fig.add_trace(trace3)
+trace4 = go.Scatter(
+        x=['35-44','45-54','55-64', '65-74','75-84'],
+        y=((np.asarray(wealth_h))/1000)/((np.asarray(wealth_uh))/1000),
+        name='Data',
+        mode="lines+markers",
+        marker={'size':6},
+        line_color='#1F77B4',
+        line_dash='dot',
+        legendgroup='Model',
+)
+fig.add_trace(trace4)
+fig.update_layout(
+        template='simple_white',
+        xaxis_title_text="Age Group",
+        yaxis_title_text="Wealth Ratio",
+        yaxis_range=[0,8],
+        margin=dict(l=20, r=20, t=0, b=60),
+        height= 200,
+        width= 400
+)
+
+fig.write_image("../plots/wealthgaps_pct.pdf",    height=300,
+        width=400,)

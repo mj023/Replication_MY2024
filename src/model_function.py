@@ -1,13 +1,14 @@
 import jax
 from jax import numpy as jnp
 from lcm.dispatchers import _base_productmap
-from lcm.entry_point import get_lcm_function
 from utils import rouwenhorst,gini
-from Mahler_Yum_2024 import MODEL_CONFIG, calc_savingsgrid
+from Mahler_Yum_2024 import MAHLER_YUM_MODEL, calc_savingsgrid
 from jax import random
 from interpax import interp1d
 import numpy as np
 import pandas as pd
+
+model = MAHLER_YUM_MODEL
 
 # --------------------------------------------------------------------------------------
 # Fixed Parameters
@@ -109,9 +110,6 @@ for i in range(1,3):
             ed = ed.at[index+8].set(1)
 init_distr_2b2t2h = jnp.array(np.loadtxt("init_distr_2b2t2h.txt"))
 initial_dists = jnp.diff(init_distr_2b2t2h[:,0],prepend=0)
-solve_and_simulate , _ = get_lcm_function(model=MODEL_CONFIG,jit = True, targets="solve_and_simulate")
-solve , _ = get_lcm_function(model=MODEL_CONFIG,jit = True, targets="solve")
-simulate, _ = get_lcm_function(model=MODEL_CONFIG,jit = True, targets="simulate")
 
 surv_HS = jnp.array(np.loadtxt("surv_HS.txt"))
 surv_CL = jnp.array(np.loadtxt("surv_CL.txt"))
@@ -121,13 +119,13 @@ spgrid = spgrid.at[:,1,0].set(surv_CL[:,1])
 spgrid = spgrid.at[:,0,1].set(surv_HS[:,0])
 spgrid = spgrid.at[:,1,1].set(surv_CL[:,0])
 
-def draw_alive(period, education, health, initial_thresholds_alive):
+""" def draw_alive(period, education, health, initial_thresholds_alive):
     thresholds = jnp.ones(39*20000)
     thresholds = thresholds.at[20000:].set(spgrid[period,education,health])
     alive = jnp.where(thresholds > initial_thresholds_alive, 1,0)
     alive = alive.reshape(39,20000)
     alive = jnp.cumprod(alive, axis=0)
-    return alive.flatten()[:-20000]
+    return alive.flatten()[:-20000] """
 
 def create_inputs(seed, nuh_1, nuh_2, nuh_3, nuh_4,nuu_1, nuu_2, nuu_3, nuu_4,xiHSh_1,xiHSh_2,xiHSh_3,xiHSh_4,xiHSu_1,xiHSu_2,xiHSu_3,xiHSu_4,xiCLu_1,xiCLu_2,xiCLu_3,xiCLu_4,xiCLh_1,xiCLh_2,xiCLh_3,xiCLh_4,y1_HS,y1_CL,ytHS_s,ytHS_sq,wagep_HS,wagep_CL,ytCL_s,ytCL_sq, sigx, chi_1,chi_2, psi, nuad, bb, conp, penre, beta_mean, beta_std):
     nuh = jnp.array([nuh_1, nuh_2, nuh_3, nuh_4])
@@ -166,12 +164,12 @@ def create_inputs(seed, nuh_1, nuh_2, nuh_3, nuh_4,nuu_1, nuu_2, nuu_3, nuu_4,xi
     "income": {"income_grid": income_grid, "xvalues" : xvalues},
     "pension": {"income_grid": income_grid, "penre":penre},
     "adj_cost": {"chimaxgrid": chimax_grid},
-    "shocks" : {
-        "productivity_shock": xtrans.T,
-        "health": tr2yp_grid,
-        "adjustment_cost": jnp.full((5, 5), 1/5),
+    "shocks":{
+        "alive__next_productivity_shock": xtrans.T,
+        "alive__next_health": tr2yp_grid,
+        "alive__next_adjustment_cost": jnp.full((5, 5), 1/5),
     }}
-    n = 20000
+    n = 10
     eff_grid = jnp.linspace(0,1,40)
     key = random.key(seed)
     initial_wealth = jnp.full((n), 0, dtype=jnp.int8)
@@ -187,21 +185,21 @@ def create_inputs(seed, nuh_1, nuh_2, nuh_3, nuh_4,nuu_1, nuu_2, nuu_3, nuu_4,xi
     initial_effort = jnp.searchsorted(eff_grid,init_distr_2b2t2h[:,2][types])
     initial_adjustment_cost = random.choice(new_keys[1], jnp.arange(5), (n,))
     initial_productivity_shock = random.choice(new_keys[2], jnp.arange(5), (n,), p = prod_dist)
-    initial_states = {"wealth": initial_wealth, "health": initial_health, "health_type": initial_health_type, "effort_t_1": initial_effort, 
+    initial_states = {"alive":{"wealth": initial_wealth, "health": initial_health, "health_type": initial_health_type, "effort_t_1": initial_effort, 
                     "productivity_shock": initial_productivity_shock, "adjustment_cost": initial_adjustment_cost,
-                    "education": initial_education, "productivity": initial_productivity, "discount_factor": initial_discount
+                    "education": initial_education, "productivity": initial_productivity, "discount_factor": initial_discount}, "dead":{"dead": jnp.full(n, 0)}
                     }
-    initial_thresholds_alive = random.uniform(new_keys[3], (39*n))
-    return params, initial_states,initial_thresholds_alive
+    
+    return params, initial_states
 
 jitted_create_inputs = jax.jit(create_inputs)
 
-def model_solve_and_simulate(nuh_1, nuh_2, nuh_3, nuh_4,nuu_1, nuu_2, nuu_3, nuu_4,xiHSh_1,xiHSh_2,xiHSh_3,xiHSh_4,xiHSu_1,xiHSu_2,xiHSu_3,xiHSu_4,xiCLu_1,xiCLu_2,xiCLu_3,xiCLu_4,xiCLh_1,xiCLh_2,xiCLh_3,xiCLh_4,y1_HS,y1_CL,ytHS_s,ytHS_sq,wagep_HS,wagep_CL,ytCL_s,ytCL_sq, sigx, chi_1,chi_2, psi, nuad, bb, conp, penre, beta_mean, beta_std):
+def model_solve_and_simulate(params):
     seed = 32
-    params, initial_states, initial_thresholds_alive = jitted_create_inputs(seed,nuh_1, nuh_2, nuh_3, nuh_4,nuu_1, nuu_2, nuu_3, nuu_4,xiHSh_1,xiHSh_2,xiHSh_3,xiHSh_4,xiHSu_1,xiHSu_2,xiHSu_3,xiHSu_4,xiCLu_1,xiCLu_2,xiCLu_3,xiCLu_4,xiCLh_1,xiCLh_2,xiCLh_3,xiCLh_4,y1_HS,y1_CL,ytHS_s,ytHS_sq,wagep_HS,wagep_CL,ytCL_s,ytCL_sq, sigx, chi_1,chi_2, psi, nuad, bb, conp, penre, beta_mean, beta_std)
-    vf_arr = solve(params)
-    res = simulate(params=params,initial_states=initial_states,additional_targets=["utility","fcost","pension","income","cnow"], V_arr_dict= vf_arr, seed=42)
-    res['alive'] = draw_alive(jnp.asarray(res['_period'].to_numpy()), jnp.asarray(res['education'].to_numpy()), jnp.asarray(res['health'].to_numpy()), initial_thresholds_alive)
+    initial_regimes = ["alive"]*10
+    params, initial_states = jitted_create_inputs(seed, **params)
+    vf_arr = model.solve(params= {"alive": params, "dead": params})
+    res = model.simulate(params= {"alive": params, "dead": params},initial_states=initial_states,initial_regimes=initial_regimes, additional_targets=["utility","fcost","pension","income","cnow"], V_arr_dict= vf_arr, seed=42)
     return res
 
 def simulate_moments(params):
@@ -252,63 +250,6 @@ def simulate_moments(params):
     moments[63] = (pension_avg/avg_income)
     print(moments)
     return moments
-
-
-def simulate_moments_boot(params_boot):
-    params_boot['seed'] = 1001
-    params, _, _ = jitted_create_inputs(**params_boot)
-    vf_arr = solve(params)
-    moments_boot = np.zeros(64)
-    for i in range(10):
-        params_boot['seed'] = i
-        _, initial_states, initial_thresholds_alive = jitted_create_inputs(**params_boot)
-        res = simulate(params=params,initial_states=initial_states,additional_targets=["utility","fcost","pension","income","cnow"], V_arr_dict= vf_arr, seed=i+2000)
-        res['alive'] = draw_alive(jnp.asarray(res['_period'].to_numpy()), jnp.asarray(res['education'].to_numpy()), jnp.asarray(res['health'].to_numpy()), initial_thresholds_alive)
-        moments = np.zeros(64)
-        res['effort'] = np.asarray(eff_grid[res['effort'].to_numpy()])
-        res['effort_t_1'] = np.asarray(eff_grid[res['effort_t_1'].to_numpy()])
-        res['wealth'] = np.asarray(calc_savingsgrid(res['wealth'].to_numpy()))
-        res['saving'] = np.asarray(calc_savingsgrid(res['saving'].to_numpy()))
-        for health in range(2):
-            for interval in range(4):
-                working_pct_10years = (res.loc[(res['_period'] >= (interval*5)) & (res['_period'] < ((interval+1)*5)) & (res['alive'] == 1) & (res['health'] == health), ["working"]].sum()/2)/(res.loc[(res['_period'] >= (interval*5)) & (res['_period'] < ((interval+1)*5)) & (res['alive'] == 1)  &(res['health'] == health), "health"].count())
-                moments[(interval+4*(1-health))] = working_pct_10years.iloc[0]
-        for health in range(2):
-            for education in range(2):
-                for interval in range(6):
-                    avg_effort_10years = (res.loc[(res['_period'] >= (interval*5)) & (res['_period'] < ((interval+1)*5)) & (res['alive'] == 1) & (res['health'] == health)& (res['education'] == education), ["effort"]].sum())/(res.loc[(res['_period'] >= (interval*5)) & (res['_period'] < ((interval+1)*5)) &(res['health'] == health) & (res['alive'] == 1) & (res['education'] == education), "effort"].count())
-                    moments[(interval+6*(1-health)+education*6*2)+8] = avg_effort_10years.iloc[0]
-                    if interval < 4:
-                        avg_income_10years = (res.loc[(res['_period'] >= (interval*5)) & (res['_period'] < ((interval+1)*5)) & (res['alive'] == 1) & (res['health'] == health)& (res['education'] == education), ["income"]].sum())/(res.loc[(res['_period'] >= (interval*5)) & (res['_period'] < ((interval+1)*5)) &(res['health'] == health) & (res['alive'] == 1) & (res['education'] == education), "income"].count())
-                        moments[(interval+4*(1-health)+education*4*2)+46] = avg_income_10years.iloc[0]*winit[1]/1000
-        for interval in range(6):
-                    median_wealth_10y = res.loc[(res['_period'] >= (interval*5)) & (res['_period'] < ((interval+1)*5)) & (res['alive'] == 1), ["wealth"]].median()
-                    moments[interval+32] = median_wealth_10y.iloc[0]
-        avgemp_HS = (res.loc[(res['alive'] == 1) & (res['education'] == 0), ["working"]].sum()/2)/(res.loc[ (res['alive'] == 1)  &(res['education'] == 0), "working"].count())
-        avgemp_CL = (res.loc[(res['alive'] == 1) & (res['education'] == 1), ["working"]].sum()/2)/(res.loc[ (res['alive'] == 1)  &(res['education'] == 1), "working"].count())
-        moments[38] = avgemp_CL.iloc[0]/avgemp_HS.iloc[0]
-        for interval in range(3):
-            non_adjusters = (res.loc[(res['_period'] >= (interval*10)) & (res['_period'] < ((interval+1)*10)) & (res['alive'] == 1) & (res['effort'] == res['effort_t_1'])].count())/ (res.loc[(res['_period'] >= (interval*10)) & (res['_period'] < ((interval+1)*10)) & (res['alive'] == 1)].count())
-            moments[interval+39] = non_adjusters.iloc[0]
-        avg_kappa = ((res.loc[(res['health']==1) & (res['alive']==1)].count()) + (res.loc[(res['health']==0) & (res['alive']==1)].count())*params_boot['conp'])/(res.loc[ (res['alive']==1)].count())
-        avg_cons = res['cnow'].mean()
-        res.loc[res['discount_factor']==0, 'discount_factor'] == -1
-        corrected_util = res['utility']/((params_boot['beta_mean']+(params_boot['beta_std']*res['discount_factor']))**res['_period'])
-        avg_utility = corrected_util.mean()
-        vsly = avg_utility / avg_kappa.iloc[0]*(avg_cons**-2)
-        moments[42] = vsly
-        std_effort = res.loc[res['alive'] == 1, 'effort'].std()
-        moments[43] = std_effort
-        moments[44] = gini(jnp.asarray(res.loc[res['alive']== 1, 'wealth'].to_numpy()))
-        cons_ratio = (res.loc[(res['alive'] == 1) & (res['health'] == 1), 'cnow'].sum()/res.loc[(res['alive'] == 1) & (res['health'] == 1), 'cnow'].count())/ (res.loc[(res['alive'] == 1) & (res['health'] == 0), 'cnow'].sum()/res.loc[(res['alive'] == 1) & (res['health'] == 0), 'cnow'].count())
-        moments[45] = cons_ratio
-        log_earnings = np.log(res.loc[(res['alive'] == 1) & (res['_period']<= retirement_age) & (res['working'] > 0), 'income'] * theta_val[1])
-        moments[62] = log_earnings.var()
-        pension_avg = (res.loc[(res['alive'] == 1) & (res['_period'] == retirement_age + 1), 'pension'].sum()/ res.loc[(res['alive'] == 1) & (res['_period'] == retirement_age+1), 'pension'].count())
-        avg_income = (res.loc[(res['alive'] == 1) & (res['_period'] < retirement_age + 1), 'income'].sum()/ res.loc[(res['alive'] == 1) & (res['_period'] < retirement_age+1), 'income'].count())
-        moments[63] = (pension_avg/avg_income)
-        moments_boot += moments
-    return moments_boot/10
 
 def simulate_wealth(params):
 

@@ -3,25 +3,22 @@
 # ======================================================================================
 
 [project]
-name = "econ_rl"
+name = "replication_MY"
 authors = [
 ]
 maintainers = [
 ]
 description = ""
-requires-python = ">=3.12"
+requires-python = "==3.13"
 dependencies = [
     "dags",
     "numpy",
     "pandas",
-    "nlopt>=2.7.1,<3",
     "flax>=0.10.4,<0.11",
-    "gymnax>=0.0.8,<0.0.9",
     "distrax>=0.1.5,<0.2",
     "nvtx>=0.2.11,<0.3",
     "interpax>=0.3.8,<0.4",
-    "petsc>=3.23.5,<4",
-    "mpi4py>=4.1.0", "networkx",
+    "networkx",
 ]
 dynamic = ["version"]
 keywords = [
@@ -84,27 +81,22 @@ pixi-kernel = ">=0.4.0,<0.5"
 plotly = ">=5.2,<6"
 pre-commit = "*"
 pybaum = "*"
-pytask = "*"
-pytask-parallel = "*"
 pytest = "*"
 pytest-cov = "*"
 pytest-xdist = "*"
-python = ">=3.12.5"
+python = "==3.13"
 python-kaleido = "*"
-scipy = "<=1.13"
 seaborn = ">=0.13.2,<0.14"
 statsmodels = ">=0.14.2,<0.15"
-petsc4py = ">=3.23.0,<4"
 
 # Development Dependencies (pypi)
 # --------------------------------------------------------------------------------------
 
 [tool.pixi.pypi-dependencies]
-fides = ">=0.7.4,<=0.7.4"
 jax = { version = ">=0.4.34", extras = ["cuda12"] }
 jaxlib = ">=0.4.34"
 pdbp = "*"
-econ_rl = {path = ".", editable = true}
+replication_MY = {path = ".", editable = true}
 statadict = "*"
 pylcm = {path = "../pylcm", editable = true}
 

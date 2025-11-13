@@ -9,6 +9,7 @@ def test_run():
     with nvtx.annotate('solve', color='green'):
         for i in range(1):
             res = model_solve_and_simulate(START_PARAMS)
-            print(res.loc[res['_period'] == 32,'alive'].to_string())
+            print(res['alive'].to_string())
+            print(res['dead'].to_string())
 
 test_run()

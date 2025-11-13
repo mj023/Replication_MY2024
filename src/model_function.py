@@ -199,7 +199,7 @@ def model_solve_and_simulate(params):
     initial_regimes = ["alive"]*10
     params, initial_states = jitted_create_inputs(seed, **params)
     vf_arr = model.solve(params= {"alive": params, "dead": params})
-    res = model.simulate(params= {"alive": params, "dead": params},initial_states=initial_states,initial_regimes=initial_regimes, additional_targets=["utility","fcost","pension","income","cnow"], V_arr_dict= vf_arr, seed=42)
+    res = model.simulate(params= {"alive": params, "dead": params},initial_states=initial_states,initial_regimes=initial_regimes, additional_targets={"alive":["utility","fcost","pension","income","cnow"]}, V_arr_dict= vf_arr, seed=42)
     return res
 
 def simulate_moments(params):

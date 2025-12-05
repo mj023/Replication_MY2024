@@ -65,7 +65,7 @@ allow-direct-references = true
 # Pixi
 # ======================================================================================
 
-[tool.pixi.project]
+[tool.pixi.workspace]
 channels = ["conda-forge"]
 platforms = ["linux-64"]
 

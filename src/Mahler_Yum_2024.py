@@ -8,7 +8,6 @@ from lcm import DiscreteGrid, LinspaceGrid
 from lcm.model import Model
 from lcm.regime import Regime
 import lcm
-import nvtx
 
 # --------------------------------------------------------------------------------------
 # Fixed Parameters
@@ -218,6 +217,7 @@ ALIVE_REGIME = Regime(
         "health_type": DiscreteGrid(HealthType),
 
     },
+    constraints={"retirement_constraint":retirement_constraint, "savings_constraint": savings_constraint},
     transitions=
         {"alive": 
             {"next_wealth": next_wealth,
@@ -252,7 +252,7 @@ DEAD_REGIME= Regime(
     regime_transition_probs=lambda: {"alive": 0.0, "dead": 1.0}
 )
 
-MAHLER_YUM_MODEL = Model([ALIVE_REGIME, DEAD_REGIME], n_periods=38)
+MAHLER_YUM_MODEL = Model([ALIVE_REGIME, DEAD_REGIME], n_periods=n)
 
 
 ########################

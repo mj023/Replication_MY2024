@@ -9,15 +9,11 @@ authors = [
 maintainers = [
 ]
 description = ""
-requires-python = "==3.13"
+requires-python = ">=3.14"
 dependencies = [
     "dags",
     "numpy",
     "pandas",
-    "flax>=0.10.4,<0.11",
-    "distrax>=0.1.5,<0.2",
-    "nvtx>=0.2.11,<0.3",
-    "interpax>=0.3.8,<0.4",
     "networkx",
 ]
 dynamic = ["version"]
@@ -84,7 +80,7 @@ pybaum = "*"
 pytest = "*"
 pytest-cov = "*"
 pytest-xdist = "*"
-python = "==3.13"
+python = ">=3.14"
 python-kaleido = "*"
 seaborn = ">=0.13.2,<0.14"
 statsmodels = ">=0.14.2,<0.15"

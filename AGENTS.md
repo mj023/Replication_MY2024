@@ -4,9 +4,9 @@
 
 ## Overview
 
-Replication of "Lifestyle Behaviors and Wealth-Health Gaps in Germany"
-(Econometrica, 2024) using pylcm. Consumption-savings model with health,
-exercise, and heterogeneous discount factors.
+Replication of "Lifestyle Behaviors and Wealth-Health Gaps in Germany" (Econometrica,
+2024\) using pylcm. Consumption-savings model with health, exercise, and heterogeneous
+discount factors.
 
 ## Build & Test
 

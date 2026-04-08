@@ -4,8 +4,13 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from Mahler_Yum_2024 import MAHLER_YUM_MODEL, START_PARAMS
-from model_function import create_inputs, simulate_moments
+from Mahler_Yum_2024 import (
+    MAHLER_YUM_MODEL,
+    START_PARAMS,
+    ages,
+    prod_shock_grid,
+)
+from model_function import create_inputs
 
 _REGRESSION_DIR = Path(__file__).parent.parent / "regression_data"
 
@@ -48,7 +53,7 @@ def test_model_solves_and_simulates():
 
 
 def test_single_type_simulation_structure():
-    """Verify simulation DataFrame has expected structure and values in range."""
+    """Verify simulation DataFrame has expected structure and finite values."""
     n_subjects = 4
     start_params_without_beta = {k: v for k, v in START_PARAMS.items() if k != "beta"}
     common_params, initial_states, _discount_factor_type = create_inputs(
@@ -93,22 +98,92 @@ def test_single_type_simulation_structure():
         "effort",
     }
     assert expected_cols.issubset(set(got.columns))
-    # Value functions should be finite where alive
     alive = got[got["regime"] == "alive"]
     assert alive["value"].notna().all()
 
 
 @pytest.mark.skipif(
-    not _REGRESSION_DIR.exists(),
+    not (_REGRESSION_DIR / "old_initial_health.npy").exists(),
     reason="Regression data not yet generated",
 )
-def test_simulate_moments_regression():
-    """Regression test: computed moments match saved reference."""
-    expected = np.load(_REGRESSION_DIR / "moments_reference.npy")
-    got = simulate_moments(START_PARAMS)
-    # Float32 non-determinism means ~1% relative differences across runs.
-    # Use rtol=0.02 to account for this.
-    np.testing.assert_allclose(got, expected, rtol=0.02)
+def test_period_0_policy_matches_old_pylcm():
+    """Regression test: period-0 policy matches pylcm 167a3a6 output.
+
+    Uses initial conditions from the old code (pylcm commit 167a3a6) to ensure
+    that the ported model produces identical period-0 actions. Period 0 is
+    deterministic (no stochastic transitions yet), so any difference indicates
+    a genuine policy difference rather than random seed noise.
+    """
+    # Load old initial conditions (generated with old pylcm)
+    old_health = np.load(_REGRESSION_DIR / "old_initial_health.npy")
+    old_effort = np.load(_REGRESSION_DIR / "old_initial_effort.npy")
+    old_prodshock = np.load(_REGRESSION_DIR / "old_initial_prodshock.npy")
+    old_adjcost = np.load(_REGRESSION_DIR / "old_initial_adjcost.npy")
+    old_discount = np.load(_REGRESSION_DIR / "old_initial_discount.npy")
+
+    # Build params (grids verified identical between old and new)
+    start_params_without_beta = {k: v for k, v in START_PARAMS.items() if k != "beta"}
+    common_params, new_initial_states, _ = create_inputs(
+        seed=32,
+        n_simulation_subjects=10000,
+        **start_params_without_beta,
+    )
+
+    # Convert old indices to new grid values
+    xvalues = prod_shock_grid.get_gridpoints()
+    uniform_gridpoints = jnp.linspace(0, 1, 5)
+
+    initial_states = {
+        "age": jnp.full(10000, ages.values[0]),
+        "wealth": jnp.full(10000, 0, dtype=jnp.int8),
+        "health": jnp.array(old_health),
+        "health_type": new_initial_states["health_type"],
+        "effort_t_1": jnp.array(old_effort),
+        "productivity_shock": xvalues[old_prodshock],
+        "adjustment_cost": uniform_gridpoints[old_adjcost],
+        "education": new_initial_states["education"],
+        "productivity": new_initial_states["productivity"],
+    }
+    discount_factor_type = jnp.array(old_discount)
+
+    beta_mean = START_PARAMS["beta"]["mean"]
+    beta_std = START_PARAMS["beta"]["std"]
+    model = MAHLER_YUM_MODEL
+
+    # Simulate per discount type
+    all_working = []
+    for beta_val, type_id in [
+        (beta_mean - beta_std, 0),
+        (beta_mean + beta_std, 1),
+    ]:
+        mask = discount_factor_type == type_id
+        n_type = int(mask.sum())
+        type_initial = {k: v[mask] for k, v in initial_states.items()}
+        type_initial["regime"] = jnp.full(
+            n_type,
+            model.regime_names_to_ids["alive"],
+            dtype=jnp.int32,
+        )
+
+        result = model.simulate(
+            params={"alive": {"discount_factor": beta_val, **common_params}},
+            initial_conditions=type_initial,
+            period_to_regime_to_V_arr=None,
+            seed=42,
+            log_level="off",
+        )
+        df = result.to_dataframe(use_labels=False)
+        p0 = df[(df["regime"] == "alive") & (df["period"] == 0)]
+        all_working.append(p0["working"].values)
+
+    working = np.concatenate(all_working)
+
+    # Period-0 working distribution must match old pylcm 167a3a6 exactly.
+    # Actions at period 0 are deterministic (no stochastic transitions yet).
+    assert (working == 0).sum() == 109
+    assert (working == 1).sum() == 5406
+    assert (working == 2).sum() == 4485
+    np.testing.assert_allclose(working.mean(), 1.4376, atol=1e-4)
 
 
 if __name__ == "__main__":

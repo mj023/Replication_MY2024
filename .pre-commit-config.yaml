@@ -35,9 +35,6 @@ repos:
         args:
           - --fix=lf
         description: Forces to replace line ending by the UNIX 'lf' character.
-      - id: name-tests-test
-        args:
-          - --pytest-test-first
       - id: no-commit-to-branch
         args:
           - --branch

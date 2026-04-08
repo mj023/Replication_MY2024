@@ -12,9 +12,7 @@ _REGRESSION_DIR = Path(__file__).parent.parent / "regression_data"
 
 def test_model_solves_and_simulates():
     """Smoke test: model runs end-to-end with small n."""
-    start_params_without_beta = {
-        k: v for k, v in START_PARAMS.items() if k != "beta"
-    }
+    start_params_without_beta = {k: v for k, v in START_PARAMS.items() if k != "beta"}
     common_params, initial_states, _discount_factor_type = create_inputs(
         seed=0,
         n_simulation_subjects=4,
@@ -29,7 +27,9 @@ def test_model_solves_and_simulates():
     initial_conditions = {
         **initial_states,
         "regime": jnp.full(
-            4, MAHLER_YUM_MODEL.regime_names_to_ids["alive"], dtype=jnp.int32,
+            4,
+            MAHLER_YUM_MODEL.regime_names_to_ids["alive"],
+            dtype=jnp.int32,
         ),
     }
 
@@ -50,9 +50,7 @@ def test_model_solves_and_simulates():
 def test_single_type_simulation_structure():
     """Verify simulation DataFrame has expected structure and values in range."""
     n_subjects = 4
-    start_params_without_beta = {
-        k: v for k, v in START_PARAMS.items() if k != "beta"
-    }
+    start_params_without_beta = {k: v for k, v in START_PARAMS.items() if k != "beta"}
     common_params, initial_states, _discount_factor_type = create_inputs(
         seed=0,
         n_simulation_subjects=n_subjects,
@@ -82,8 +80,18 @@ def test_single_type_simulation_structure():
     ).to_dataframe(use_labels=False)
 
     assert len(got) > 0
-    expected_cols = {"subject_id", "period", "age", "regime", "value",
-                     "wealth", "health", "working", "saving", "effort"}
+    expected_cols = {
+        "subject_id",
+        "period",
+        "age",
+        "regime",
+        "value",
+        "wealth",
+        "health",
+        "working",
+        "saving",
+        "effort",
+    }
     assert expected_cols.issubset(set(got.columns))
     # Value functions should be finite where alive
     alive = got[got["regime"] == "alive"]

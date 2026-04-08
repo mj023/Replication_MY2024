@@ -5,11 +5,8 @@ import jax.numpy as jnp
 import numpy as np
 import pandas as pd
 from jax import random
-from scipy.interpolate import interp1d as scipy_interp1d
-
 from lcm.utils.dispatchers import productmap
-
-_DATA_DIR = Path(__file__).parent
+from scipy.interpolate import interp1d as scipy_interp1d
 
 from Mahler_Yum_2024 import (
     MAHLER_YUM_MODEL,
@@ -18,7 +15,9 @@ from Mahler_Yum_2024 import (
     prod_shock_grid,
     spgrid,
 )
-from utils import gini, rouwenhorst
+from utils import gini
+
+_DATA_DIR = Path(__file__).parent
 
 model = MAHLER_YUM_MODEL
 
@@ -39,9 +38,7 @@ sigma = 2
 
 
 const_healthtr = -0.906
-age_const = jnp.asarray(
-    [0.0, -0.289, -0.644, -0.881, -1.138, -1.586, -1.586, -1.586]
-)
+age_const = jnp.asarray([0.0, -0.289, -0.644, -0.881, -1.138, -1.586, -1.586, -1.586])
 eff_param = jnp.asarray([0.693, 0.734])
 eff_sq = 0
 healthy_dummy = 2.311
@@ -198,7 +195,16 @@ initial_dists = jnp.diff(init_distr_2b2t2h[:, 0], prepend=0)
 
 
 def create_inputs(
-    seed, n_simulation_subjects, nu, xi, income_process, chi, psi, bb, conp, penre,
+    seed,
+    n_simulation_subjects,
+    nu,
+    xi,
+    income_process,
+    chi,
+    psi,
+    bb,
+    conp,
+    penre,
     sigma,
 ):
     income_grid = create_income_grid(income_process)
@@ -236,20 +242,16 @@ def create_inputs(
     initial_education = ed[types]
     initial_productivity = prod[types]
     discount_factor_type = discount[types]
-    initial_effort = jnp.searchsorted(
-        eff_grid_local, init_distr_2b2t2h[:, 2][types]
-    )
+    initial_effort = jnp.searchsorted(eff_grid_local, init_distr_2b2t2h[:, 2][types])
     initial_adjustment_cost = random.uniform(new_keys[1], (n_simulation_subjects,))
     prod_dist = jax.lax.fori_loop(
         0,
         1000000,
-        lambda i, a: a @ xtrans.T,
+        lambda i, a: a @ xtrans.T,  # noqa: ARG005
         jnp.full(5, 1 / 5),
     )
     initial_productivity_shock = xvalues[
-        random.choice(
-            new_keys[2], jnp.arange(5), (n_simulation_subjects,), p=prod_dist
-        )
+        random.choice(new_keys[2], jnp.arange(5), (n_simulation_subjects,), p=prod_dist)
     ]
     initial_states = {
         "age": jnp.full(n_simulation_subjects, ages.values[0]),
@@ -269,11 +271,11 @@ def create_inputs(
 def model_solve_and_simulate(params):
     seed = 32
     n_subjects = 10000
-    start_params_without_beta = {
-        k: v for k, v in params.items() if k != "beta"
-    }
+    start_params_without_beta = {k: v for k, v in params.items() if k != "beta"}
     common_params, initial_states, discount_factor_type = create_inputs(
-        seed, n_simulation_subjects=n_subjects, **start_params_without_beta,
+        seed,
+        n_simulation_subjects=n_subjects,
+        **start_params_without_beta,
     )
 
     beta_mean = params["beta"]["mean"]
@@ -291,7 +293,9 @@ def model_solve_and_simulate(params):
         n_type = int(mask.sum())
         type_initial = {k: v[mask] for k, v in initial_states.items()}
         type_initial["regime"] = jnp.full(
-            n_type, model.regime_names_to_ids["alive"], dtype=jnp.int32,
+            n_type,
+            model.regime_names_to_ids["alive"],
+            dtype=jnp.int32,
         )
 
         result = model.simulate(
@@ -320,9 +324,7 @@ def simulate_moments(params):
 
     # Convert indices to values (discrete states may be float in DataFrame)
     res["effort"] = np.asarray(eff_grid[res["effort"].to_numpy().astype(int)])
-    res["effort_t_1"] = np.asarray(
-        eff_grid[res["effort_t_1"].to_numpy().astype(int)]
-    )
+    res["effort_t_1"] = np.asarray(eff_grid[res["effort_t_1"].to_numpy().astype(int)])
     res["wealth"] = np.asarray(calc_savingsgrid(res["wealth"].to_numpy()))
     res["saving"] = np.asarray(calc_savingsgrid(res["saving"].to_numpy()))
 
@@ -349,19 +351,19 @@ def simulate_moments(params):
                     & (res["health"] == health)
                     & (res["education"] == education)
                 )
-                avg_effort = res.loc[mask, "effort"].sum() / res.loc[
-                    mask, "effort"
-                ].count()
-                moments[
-                    (interval + 6 * (1 - health) + education * 6 * 2) + 8
-                ] = avg_effort
+                avg_effort = (
+                    res.loc[mask, "effort"].sum() / res.loc[mask, "effort"].count()
+                )
+                moments[(interval + 6 * (1 - health) + education * 6 * 2) + 8] = (
+                    avg_effort
+                )
                 if interval < 4:
-                    avg_income = res.loc[mask, "income"].sum() / res.loc[
-                        mask, "income"
-                    ].count()
-                    moments[
-                        (interval + 4 * (1 - health) + education * 4 * 2) + 46
-                    ] = (avg_income * winit[1] / 1000)
+                    avg_income = (
+                        res.loc[mask, "income"].sum() / res.loc[mask, "income"].count()
+                    )
+                    moments[(interval + 4 * (1 - health) + education * 4 * 2) + 46] = (
+                        avg_income * winit[1] / 1000
+                    )
 
     # Median wealth by interval
     for interval in range(6):
@@ -419,20 +421,14 @@ def simulate_moments(params):
 
     # Log income variance
     log_earnings = np.log(
-        res.loc[
-            (res["period"] <= retirement_age) & (res["working"] > 0), "income"
-        ]
+        res.loc[(res["period"] <= retirement_age) & (res["working"] > 0), "income"]
         * theta_val[1]
     )
     moments[62] = log_earnings.var()
 
     # Pension replacement ratio
-    pension_avg = res.loc[
-        (res["period"] == retirement_age + 1), "pension"
-    ].mean()
-    avg_income = res.loc[
-        (res["period"] < retirement_age + 1), "income"
-    ].mean()
+    pension_avg = res.loc[(res["period"] == retirement_age + 1), "pension"].mean()
+    avg_income = res.loc[(res["period"] < retirement_age + 1), "income"].mean()
     moments[63] = pension_avg / avg_income
 
     print(moments)

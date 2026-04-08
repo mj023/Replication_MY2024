@@ -1,72 +1,123 @@
-# ======================================================================================
-# Project metadata
-# ======================================================================================
+[build-system]
+build-backend = "hatchling.build"
+requires = [ "hatch-vcs", "hatchling" ]
 
 [project]
-name = "replication_MY"
-authors = [
-]
-maintainers = [
-]
-description = ""
-requires-python = ">=3.14"
-dependencies = [
-    "dags",
-    "numpy",
-    "pandas",
-    "networkx",
-]
-dynamic = ["version"]
+name = "replication-my"
+description = "Replication of Mahler & Yum (2024, Econometrica)"
+readme = { file = "README.md", content-type = "text/markdown" }
 keywords = [
-
+  "Dynamic programming",
+  "Econometrics",
+  "Economics",
+  "Life cycle models",
 ]
+license = { text = "MIT" }
+maintainers = []
+authors = []
+requires-python = ">=3.14"
 classifiers = [
-
+  "Intended Audience :: Science/Research",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: POSIX",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.14",
+]
+dynamic = [ "version" ]
+dependencies = [
+  "dags",
+  "networkx",
+  "numpy",
+  "pandas",
 ]
 
-[project.readme]
-file = "README.md"
-content-type = "text/markdown"
+[tool.hatch]
+build.hooks.vcs.version-file = "src/_version.py"
+build.targets.sdist.exclude = [ "tests" ]
+build.targets.sdist.only-packages = true
+build.targets.wheel.only-include = [ "src" ]
+build.targets.wheel.sources = [ "src" ]
+metadata.allow-direct-references = true
+version.source = "vcs"
 
-[project.license]
-text = "MIT"
+[tool.ruff]
+target-version = "py314"
+fix = true
+unsafe-fixes = false
+[tool.ruff.lint]
+select = [ "ALL" ]
+extend-ignore = [
+  "COM812",  # Conflicts with ruff-format
+  "D",       # Docstrings
+  "EM101",   # Exception must not use a string literal
+  "EM102",   # Exception must not use an f-string literal
+  "FIX002",  # Line contains TODO
+  "ISC001",  # Conflicts with ruff-format
+  "N802",    # Function name should be lowercase
+  "N803",    # Argument name should be lowercase
+  "N806",    # Variable in function should be lowercase
+  "N815",    # Variable in class scope should not be mixedCase
+  "N816",    # Variable in global scope should not be mixedCase
+  "PLR0913", # Too many arguments in function definition
+  "S301",    # pickle module (standard intermediate format)
+  "TC001",   # Move application import into a type-checking block
+  "TC002",   # Move third-party import into a type-checking block
+  "TC003",   # Move standard library import into a type-checking block
+  "TRY003",  # Long messages outside exception class
+  "F722",    # https://docs.kidger.site/jaxtyping/faq/#flake8-or-ruff-are-throwing-an-error
+]
+per-file-ignores."src/*" = [
+  "ANN",     # Annotations (replication scripts lack full annotations)
+  "E402",    # Module level import not at top of file
+  "INP001",  # Implicit namespace package (src/ layout without __init__.py)
+  "PD008",   # Use .loc instead of .at (false positive on JAX .at[])
+  "PLR2004", # Magic values (replication uses numeric constants throughout)
+  "T201",    # print found (replication scripts use print)
+]
+per-file-ignores."src/{estimation,plot,soep_data,stderrors_sens,utils}.py" = [
+  "ALL", # Out-of-scope legacy replication scripts, not updated
+]
+per-file-ignores."src/test_*" = [
+  "ANN",     # Annotations
+  "INP001",  # Implicit namespace package
+  "PLR2004", # Magic value used in comparison
+  "S101",    # Use of assert
+]
+pydocstyle.convention = "google"
 
-# ======================================================================================
-# Build system configuration
-# ======================================================================================
+[tool.pyproject-fmt]
+column_width = 88
+max_supported_python = "3.14"
+table_format = "long"
+collapse_tables = [ "tool.hatch", "tool.pytest", "tool.ty" ]
+expand_tables = [
+  "tool.pixi.dependencies",
+  "tool.pixi.environments",
+  "tool.pixi.feature.tests.pypi-dependencies",
+  "tool.pixi.feature.tests.tasks",
+  "tool.pixi.pypi-dependencies",
+  "tool.pixi.tasks",
+  "tool.pixi.workspace",
+]
 
-[build-system]
-requires = ["hatchling", "hatch_vcs"]
-build-backend = "hatchling.build"
+[tool.ty]
+rules.ambiguous-protocol-member = "error"
+rules.deprecated = "error"
+rules.division-by-zero = "error"
+rules.ignore-comment-unknown-rule = "error"
+rules.ineffective-final = "error"
+rules.invalid-enum-member-annotation = "error"
+rules.invalid-ignore-comment = "error"
+rules.invalid-legacy-positional-parameter = "error"
 
-[tool.hatch.build.hooks.vcs]
-version-file = "src/_version.py"
+[tool.pytest]
+ini_options.addopts = [ "--pdbcls=pdbp:Pdb" ]
+ini_options.filterwarnings = []
 
-[tool.hatch.build.targets.sdist]
-exclude = ["tests"]
-only-packages = true
-
-[tool.hatch.build.targets.wheel]
-only-include = ["src"]
-sources = ["src"]
-
-[tool.hatch.version]
-source = "vcs"
-
-[tool.hatch.metadata]
-allow-direct-references = true
-
-
-# ======================================================================================
-# Pixi
-# ======================================================================================
-
-[tool.pixi.workspace]
-channels = ["conda-forge"]
-platforms = ["linux-64"]
-
-# Development Dependencies (conda)
-# --------------------------------------------------------------------------------------
+[tool.yamlfix]
+line_length = 88
+none_representation = "null"
+sequence_style = "block_style"
 
 [tool.pixi.dependencies]
 deepdiff = "*"
@@ -75,48 +126,31 @@ nbformat = ">=5.10.4,<6"
 optimagic = "*"
 pixi-kernel = ">=0.4.0,<0.5"
 plotly = ">=5.2,<6"
-pre-commit = "*"
+prek = "*"
 pybaum = "*"
+python = "~=3.14.0"
+python-kaleido = "*"
+scipy = "*"
+seaborn = ">=0.13.2,<0.14"
+statsmodels = ">=0.14.2,<0.15"
+[tool.pixi.environments]
+tests = { features = [ "tests" ], solve-group = "default" }
+[tool.pixi.feature.tests.pypi-dependencies]
 pytest = "*"
 pytest-cov = "*"
 pytest-xdist = "*"
-python = ">=3.14"
-python-kaleido = "*"
-seaborn = ">=0.13.2,<0.14"
-statsmodels = ">=0.14.2,<0.15"
-
-# Development Dependencies (pypi)
-# --------------------------------------------------------------------------------------
-
+ty = "*"
+[tool.pixi.feature.tests.tasks]
+tests = "pytest src/test_run_model.py"
+tests-with-cov = "pytest src/test_run_model.py --cov-report=xml --cov=./"
+ty = "ty check"
 [tool.pixi.pypi-dependencies]
-jax = { version = ">=0.4.34", extras = ["cuda12"] }
+jax = { version = ">=0.4.34", extras = [ "cuda12" ] }
 jaxlib = ">=0.4.34"
 pdbp = "*"
-replication_MY = {path = ".", editable = true}
+pylcm = { path = "../pylcm", editable = true }
+replication_MY = { path = ".", editable = true }
 statadict = "*"
-pylcm = {path = "../pylcm", editable = true}
-
-
-# Features and Tasks
-# --------------------------------------------------------------------------------------
-
-[tool.pixi.feature.test.tasks]
-tests = "pytest tests"
-tests-with-cov = "pytest tests --cov-report=xml --cov=./"
-
-[tool.pixi.feature.mypy.dependencies]
-mypy = "*"
-pandas-stubs = "*"
-matplotlib = "*"  # required because of pandas
-
-[tool.pixi.feature.mypy.tasks]
-mypy = "mypy src"
-
-# Environments
-# --------------------------------------------------------------------------------------
-
-[tool.pixi.environments]
-mypy = {features = ["mypy"], solve-group = "default"}
-test = {features = ["test"], solve-group = "default"}
-
-
+[tool.pixi.workspace]
+channels = [ "conda-forge" ]
+platforms = [ "linux-64" ]

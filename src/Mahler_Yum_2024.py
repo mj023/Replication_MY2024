@@ -20,9 +20,8 @@ from functools import partial
 from pathlib import Path
 
 import jax.numpy as jnp
-import numpy as np
-
 import lcm
+import numpy as np
 from lcm import (
     AgeGrid,
     DiscreteGrid,
@@ -149,7 +148,9 @@ def scaled_adjustment_cost(
 
 
 def cnow(
-    net_income: FloatND, wealth: ContinuousState, saving: ContinuousAction,
+    net_income: FloatND,
+    wealth: ContinuousState,
+    saving: ContinuousAction,
 ) -> FloatND:
     wealth = calc_savingsgrid(wealth)
     saving = calc_savingsgrid(saving)
@@ -157,7 +158,11 @@ def cnow(
 
 
 def cons_util(
-    health: DiscreteState, cnow: FloatND, kappa: float, sigma: float, bb: float,
+    health: DiscreteState,
+    cnow: FloatND,
+    kappa: float,
+    sigma: float,
+    bb: float,
 ) -> FloatND:
     mucon = jnp.where(health, 1, kappa)
     return mucon * (((cnow) ** (1.0 - sigma)) / (1.0 - sigma)) + mucon * bb
@@ -179,13 +184,16 @@ def fcost(
 
 
 def net_income(
-    benefits: FloatND, taxed_income: FloatND, pension: FloatND,
+    benefits: FloatND,
+    taxed_income: FloatND,
+    pension: FloatND,
 ) -> FloatND:
     return taxed_income + pension + benefits
 
 
 def scaled_productivity_shock(
-    productivity_shock: ContinuousState, sigx: float,
+    productivity_shock: ContinuousState,
+    sigx: float,
 ) -> FloatND:
     return productivity_shock * sigx
 
@@ -212,7 +220,9 @@ def taxed_income(income: FloatND) -> FloatND:
 
 
 def benefits(
-    period: Period, health: DiscreteState, working: DiscreteAction,
+    period: Period,
+    health: DiscreteState,
+    working: DiscreteAction,
 ) -> FloatND:
     eligible = jnp.logical_and(health == 0, working == 0)
     return jnp.where(
@@ -277,13 +287,13 @@ def next_regime(
 
 
 def retirement_constraint(period: Period, working: DiscreteAction) -> BoolND:
-    return jnp.logical_not(
-        jnp.logical_and(period > retirement_age, working > 0)
-    )
+    return jnp.logical_not(jnp.logical_and(period > retirement_age, working > 0))
 
 
 def savings_constraint(
-    net_income: FloatND, wealth: ContinuousState, saving: ContinuousAction,
+    net_income: FloatND,
+    wealth: ContinuousState,
+    saving: ContinuousAction,
 ) -> BoolND:
     wealth = calc_savingsgrid(wealth)
     saving = calc_savingsgrid(saving)

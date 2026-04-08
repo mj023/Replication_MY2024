@@ -271,8 +271,6 @@ def model_solve_and_simulate(params):
     beta_std = params["beta_std"]
 
     # Two-solve approach: simulate separately for each discount type, combine.
-    shock_cols = ["productivity_shock", "adjustment_cost"]
-
     dfs = []
     for beta_val, type_id in [
         (beta_mean - beta_std, 0),
@@ -281,12 +279,7 @@ def model_solve_and_simulate(params):
         mask = discount_factor_type == type_id
         type_df = initial_conditions_df.loc[mask].reset_index(drop=True)
 
-        type_initial = {
-            **initial_conditions_from_dataframe(
-                df=type_df.drop(columns=shock_cols), model=model
-            ),
-            **{col: jnp.array(type_df[col].to_numpy()) for col in shock_cols},
-        }
+        type_initial = initial_conditions_from_dataframe(df=type_df, model=model)
 
         result = model.simulate(
             params={"alive": {"discount_factor": beta_val, **common_params}},

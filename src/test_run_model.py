@@ -1,6 +1,5 @@
 from pathlib import Path
 
-import jax.numpy as jnp
 import numpy as np
 import pandas as pd
 import pytest
@@ -25,13 +24,9 @@ def test_model_solves_and_simulates():
     common_params, initial_conditions_df, _discount_factor_type = create_inputs(
         seed=0, n_simulation_subjects=4, **start_params_without_beta
     )
-    shock_cols = ["productivity_shock", "adjustment_cost"]
-    initial_conditions = {
-        **initial_conditions_from_dataframe(
-            df=initial_conditions_df.drop(columns=shock_cols), model=MAHLER_YUM_MODEL
-        ),
-        **{col: jnp.array(initial_conditions_df[col]) for col in shock_cols},
-    }
+    initial_conditions = initial_conditions_from_dataframe(
+        df=initial_conditions_df, model=MAHLER_YUM_MODEL
+    )
     params = {
         "alive": {
             "discount_factor": START_PARAMS["beta_mean"],
@@ -106,7 +101,6 @@ def test_period_0_policy_matches_old_pylcm():
         }
     )
 
-    shock_cols = ["productivity_shock", "adjustment_cost"]
     discount_factor_type = old_discount
     beta_mean = START_PARAMS["beta_mean"]
     beta_std = START_PARAMS["beta_std"]
@@ -118,12 +112,9 @@ def test_period_0_policy_matches_old_pylcm():
     ]:
         mask = discount_factor_type == type_id
         type_df = old_ic_df.loc[mask].reset_index(drop=True)
-        type_initial = {
-            **initial_conditions_from_dataframe(
-                df=type_df.drop(columns=shock_cols), model=MAHLER_YUM_MODEL
-            ),
-            **{col: jnp.array(type_df[col]) for col in shock_cols},
-        }
+        type_initial = initial_conditions_from_dataframe(
+            df=type_df, model=MAHLER_YUM_MODEL
+        )
 
         result = MAHLER_YUM_MODEL.simulate(
             params={"alive": {"discount_factor": beta_val, **common_params}},

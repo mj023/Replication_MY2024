@@ -17,24 +17,19 @@ _REGRESSION_DIR = Path(__file__).parent.parent / "regression_data"
 
 
 def test_model_solves_and_simulates():
-    """Smoke test: model runs end-to-end with small n."""
-    start_params_without_beta = {
-        k: v for k, v in START_PARAMS.items() if k not in ("beta_mean", "beta_std")
-    }
+    """Smoke test: model runs end-to-end with small n via model_solve_and_simulate."""
+    # Use a small-n variant by calling create_inputs + simulate directly
+    params_without_beta = {k: v for k, v in START_PARAMS.items() if k != "beta"}
     common_params, initial_conditions_df, _discount_factor_type = create_inputs(
-        seed=0, n_simulation_subjects=4, **start_params_without_beta
+        seed=0, n_simulation_subjects=4, params=params_without_beta
     )
+    beta = START_PARAMS["beta"]
+    assert isinstance(beta, pd.Series)
     initial_conditions = initial_conditions_from_dataframe(
         df=initial_conditions_df, model=MAHLER_YUM_MODEL
     )
-    params = {
-        "alive": {
-            "discount_factor": START_PARAMS["beta_mean"],
-            **common_params,
-        },
-    }
     result = MAHLER_YUM_MODEL.simulate(
-        params=params,
+        params={"alive": {"discount_factor": beta["mean"], **common_params}},
         initial_conditions=initial_conditions,
         period_to_regime_to_V_arr=None,
         seed=12345,
@@ -62,20 +57,16 @@ def test_period_0_policy_matches_old_pylcm():
     old_health = np.load(_REGRESSION_DIR / "old_initial_health.npy")
     old_effort = np.load(_REGRESSION_DIR / "old_initial_effort.npy")
     old_discount = np.load(_REGRESSION_DIR / "old_initial_discount.npy")
-
-    start_params_without_beta = {
-        k: v for k, v in START_PARAMS.items() if k not in ("beta_mean", "beta_std")
-    }
-    common_params, new_ic_df, _ = create_inputs(
-        seed=32, n_simulation_subjects=10000, **start_params_without_beta
-    )
-
-    # Build DataFrame with OLD initial conditions using string labels
-    health_labels = {0: "bad", 1: "good"}
-    effort_labels = {i: f"class{i}" for i in range(40)}
-
     old_prodshock = np.load(_REGRESSION_DIR / "old_initial_prodshock.npy")
     old_adjcost = np.load(_REGRESSION_DIR / "old_initial_adjcost.npy")
+
+    params_without_beta = {k: v for k, v in START_PARAMS.items() if k != "beta"}
+    common_params, new_ic_df, _ = create_inputs(
+        seed=32, n_simulation_subjects=10000, params=params_without_beta
+    )
+
+    health_labels = {0: "bad", 1: "good"}
+    effort_labels = {i: f"class{i}" for i in range(40)}
 
     xvalues = prod_shock_grid.get_gridpoints()
     uniform_gridpoints = np.linspace(0, 1, 5)
@@ -101,14 +92,14 @@ def test_period_0_policy_matches_old_pylcm():
         }
     )
 
+    beta = START_PARAMS["beta"]
+    assert isinstance(beta, pd.Series)
     discount_factor_type = old_discount
-    beta_mean = START_PARAMS["beta_mean"]
-    beta_std = START_PARAMS["beta_std"]
 
     all_working = []
     for beta_val, type_id in [
-        (beta_mean - beta_std, 0),
-        (beta_mean + beta_std, 1),
+        (beta["mean"] - beta["std"], 0),
+        (beta["mean"] + beta["std"], 1),
     ]:
         mask = discount_factor_type == type_id
         type_df = old_ic_df.loc[mask].reset_index(drop=True)

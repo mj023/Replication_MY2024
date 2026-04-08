@@ -71,6 +71,7 @@ per-file-ignores."src/*" = [
   "E402",    # Module level import not at top of file
   "INP001",  # Implicit namespace package (src/ layout without __init__.py)
   "PD008",   # Use .loc instead of .at (false positive on JAX .at[])
+  "PD011",   # Use .to_numpy() instead of .values (false positive on AgeGrid .values)
   "PLR2004", # Magic values (replication uses numeric constants throughout)
   "T201",    # print found (replication scripts use print)
 ]

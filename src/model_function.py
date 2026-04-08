@@ -29,60 +29,84 @@ retirement_age = 19
 winit = jnp.array([43978, 48201])
 avrgearn = avrgearn / winit[1]
 
-phi_interp_values = jnp.array([1, 8, 13, 20])
 
+def create_phigrid(nu, nu_ad):
+    """Interpolate work disutility knots to full period grid.
 
-def create_phigrid(nu, nu_e):
+    Args:
+        nu: DataFrame with columns "unhealthy", "healthy" and period index.
+        nu_ad: Scalar education adjustment factor.
+
+    """
     phigrid = jnp.zeros((retirement_age + 1, 2, 2))
-    for i in range(2):
-        for j in range(2):
-            interp_points = jnp.arange(1, retirement_age + 2)
-            spline = scipy_interp1d(
-                np.asarray(phi_interp_values), np.asarray(nu[j]), kind="cubic"
-            )
-            temp_grid = jnp.asarray(spline(interp_points))
-            temp_grid = jnp.where(i == 0, temp_grid * jnp.exp(nu_e), temp_grid)
-            phigrid = phigrid.at[:, i, j].set(temp_grid)
+    for j, health in enumerate(["unhealthy", "healthy"]):
+        spline = scipy_interp1d(
+            np.asarray(nu.index), np.asarray(nu[health]), kind="cubic"
+        )
+        interp_points = jnp.arange(1, retirement_age + 2)
+        temp_grid = jnp.asarray(spline(interp_points))
+        # education=0 (low): apply nu_ad adjustment
+        phigrid = phigrid.at[:, 0, j].set(temp_grid * jnp.exp(nu_ad))
+        # education=1 (high): no adjustment
+        phigrid = phigrid.at[:, 1, j].set(temp_grid)
     return phigrid
 
 
-xi_interp_values = jnp.array([1, 12, 20, 31])
-
-
 def create_xigrid(xi):
+    """Interpolate effort disutility knots to full period grid.
+
+    Args:
+        xi: DataFrame with MultiIndex columns (education, health) and period index.
+
+    """
     xigrid = jnp.zeros((n, 2, 2))
-    for i in range(2):
-        for j in range(2):
+    edu_labels = ["low", "high"]
+    health_labels = ["unhealthy", "healthy"]
+    for i, edu in enumerate(edu_labels):
+        for j, health in enumerate(health_labels):
+            knots = np.asarray(xi[(edu, health)])
+            spline = scipy_interp1d(np.asarray(xi.index), knots, kind="cubic")
             interp_points = np.arange(1, 31)
-            spline = scipy_interp1d(
-                np.asarray(xi_interp_values), np.asarray(xi[i][j]), kind="cubic"
-            )
             temp_grid = jnp.asarray(spline(interp_points))
             xigrid = xigrid.at[0:30, i, j].set(temp_grid)
-            xigrid = xigrid.at[30:n, i, j].set(xi[i][j][3])
+            xigrid = xigrid.at[30:n, i, j].set(knots[-1])
     return xigrid
 
 
-def create_chimaxgrid(chi_1, chi_2):
+def create_chimaxgrid(chi):
     t = jnp.arange(38)
-    return jnp.maximum(chi_1 * jnp.exp(chi_2 * t), 0)
+    return jnp.maximum(chi[0] * jnp.exp(chi[1] * t), 0)
 
 
-def create_income_grid(
-    y1_HS, y1_CL, ytHS_s, ytHS_sq, wagep_HS, wagep_CL, ytCL_s, ytCL_sq, sigx
-):
+def create_income_grid(income_process):
+    """Build base income grid from income process parameters.
+
+    Args:
+        income_process: Dict with "y1", "yt_s", "yt_sq", "wagep" (each a
+            pd.Series indexed by education), and "sigx" (scalar).
+
+    """
+    sigx = income_process["sigx"]
     sdztemp = ((sigx**2.0) / (1.0 - rho**2.0)) ** 0.5
     j = jnp.arange(20)
     health = jnp.arange(2)
     education = jnp.arange(2)
 
+    y1 = income_process["y1"]
+    yt_s = income_process["yt_s"]
+    yt_sq = income_process["yt_sq"]
+    wagep = income_process["wagep"]
+
     def calc_base(_period, health, education):
         yt = jnp.where(
             education == 1,
-            (y1_CL * jnp.exp(ytCL_s * (_period) + ytCL_sq * (_period) ** 2.0))
-            * (1.0 - wagep_CL * (1 - health)),
-            (y1_HS * jnp.exp(ytHS_s * (_period) + ytHS_sq * (_period) ** 2.0))
-            * (1.0 - wagep_HS * (1 - health)),
+            (
+                y1["high"]
+                * jnp.exp(yt_s["high"] * _period + yt_sq["high"] * _period**2.0)
+            )
+            * (1.0 - wagep["high"] * (1 - health)),
+            (y1["low"] * jnp.exp(yt_s["low"] * _period + yt_sq["low"] * _period**2.0))
+            * (1.0 - wagep["low"] * (1 - health)),
         )
         return yt / (
             jnp.exp(((jnp.log(theta_val[1]) ** 2.0) ** 2.0) / 2.0)
@@ -124,77 +148,32 @@ _HEALTH_TYPE_LABELS = {0: "low", 1: "high"}
 _EFFORT_LABELS = {i: f"class{i}" for i in range(40)}
 
 
-def create_inputs(
-    seed,
-    n_simulation_subjects,
-    nuh_1,
-    nuh_2,
-    nuh_3,
-    nuh_4,
-    nuu_1,
-    nuu_2,
-    nuu_3,
-    nuu_4,
-    xiHSh_1,
-    xiHSh_2,
-    xiHSh_3,
-    xiHSh_4,
-    xiHSu_1,
-    xiHSu_2,
-    xiHSu_3,
-    xiHSu_4,
-    xiCLu_1,
-    xiCLu_2,
-    xiCLu_3,
-    xiCLu_4,
-    xiCLh_1,
-    xiCLh_2,
-    xiCLh_3,
-    xiCLh_4,
-    y1_HS,
-    y1_CL,
-    ytHS_s,
-    ytHS_sq,
-    wagep_HS,
-    wagep_CL,
-    ytCL_s,
-    ytCL_sq,
-    sigx,
-    chi_1,
-    chi_2,
-    psi,
-    nuad,
-    bb,
-    conp,
-    penre,
-):
-    nuh = jnp.array([nuh_1, nuh_2, nuh_3, nuh_4])
-    nuu = jnp.array([nuu_1, nuu_2, nuu_3, nuu_4])
-    nu = [nuu, nuh]
-    xi_HSh = jnp.array([xiHSh_1, xiHSh_2, xiHSh_3, xiHSh_4])
-    xi_HSu = jnp.array([xiHSu_1, xiHSu_2, xiHSu_3, xiHSu_4])
-    xi_CLu = jnp.array([xiCLu_1, xiCLu_2, xiCLu_3, xiCLu_4])
-    xi_CLh = jnp.array([xiCLh_1, xiCLh_2, xiCLh_3, xiCLh_4])
-    xi = [[xi_HSu, xi_HSh], [xi_CLu, xi_CLh]]
-    income_grid = create_income_grid(
-        y1_HS, y1_CL, ytHS_s, ytHS_sq, wagep_HS, wagep_CL, ytCL_s, ytCL_sq, sigx
-    )
-    chimax_grid = create_chimaxgrid(chi_1, chi_2)
+def create_inputs(seed, n_simulation_subjects, params):
+    """Build model params and initial conditions from structured parameters.
+
+    Args:
+        seed: Random seed for initial condition draws.
+        n_simulation_subjects: Number of agents.
+        params: Structured parameter dict (without beta).
+
+    """
+    income_grid = create_income_grid(params["income_process"])
+    chimax_grid = create_chimaxgrid(params["chi"])
     xvalues = prod_shock_grid.get_gridpoints()
     xtrans = prod_shock_grid.get_transition_probs()
-    xi_grid = create_xigrid(xi)
-    phi_grid = create_phigrid(nu, nuad)
+    xi_grid = create_xigrid(params["xi"])
+    phi_grid = create_phigrid(params["nu"], params["nu_ad"])
 
-    # Params for solve/simulate (only optimized-derived quantities;
-    # sigma, tr2yp_grid, and spgrid are in fixed_params on the Model)
-    params = {
+    model_params = {
         "disutil": {"phigrid": phi_grid},
-        "fcost": {"psi": psi, "xigrid": xi_grid},
-        "cons_util": {"bb": bb, "kappa": conp},
+        "fcost": {"psi": params["psi"], "xigrid": xi_grid},
+        "cons_util": {"bb": params["bb"], "kappa": params["conp"]},
         "income": {"income_grid": income_grid},
-        "pension": {"income_grid": income_grid, "penre": penre},
+        "pension": {"income_grid": income_grid, "penre": params["penre"]},
         "scaled_adjustment_cost": {"chimaxgrid": chimax_grid},
-        "scaled_productivity_shock": {"sigx": jnp.sqrt(sigx)},
+        "scaled_productivity_shock": {
+            "sigx": jnp.sqrt(params["income_process"]["sigx"])
+        },
     }
 
     # Draw initial conditions
@@ -221,9 +200,6 @@ def create_inputs(
         xvalues[random.choice(new_keys[2], jnp.arange(5), (n,), p=prod_dist)]
     )
 
-    # Build initial conditions as a pandas DataFrame with string labels
-    # for discrete states. Shock states (productivity_shock, adjustment_cost)
-    # are continuous and included as float columns.
     initial_conditions_df = pd.DataFrame(
         {
             "regime": "alive",
@@ -254,23 +230,20 @@ def create_inputs(
         }
     )
 
-    return params, initial_conditions_df, np.asarray(initial_discount)
+    return model_params, initial_conditions_df, np.asarray(initial_discount)
 
 
 def model_solve_and_simulate(params):
     seed = 32
     n_subjects = 10000
-    start_params_without_beta = {
-        k: v for k, v in params.items() if k not in ("beta_mean", "beta_std")
-    }
+    params_without_beta = {k: v for k, v in params.items() if k != "beta"}
     common_params, initial_conditions_df, discount_factor_type = create_inputs(
-        seed, n_simulation_subjects=n_subjects, **start_params_without_beta
+        seed, n_simulation_subjects=n_subjects, params=params_without_beta
     )
 
-    beta_mean = params["beta_mean"]
-    beta_std = params["beta_std"]
+    beta_mean = params["beta"]["mean"]
+    beta_std = params["beta"]["std"]
 
-    # Two-solve approach: simulate separately for each discount type, combine.
     dfs = []
     for beta_val, type_id in [
         (beta_mean - beta_std, 0),

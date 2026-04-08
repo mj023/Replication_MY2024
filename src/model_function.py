@@ -471,3 +471,29 @@ def simulate_moments(params):
     moments[63] = pension_avg / avg_income
     print(moments)
     return moments
+
+
+def simulate_wealth(params):
+    res = model_solve_and_simulate(params)
+    res = res[res["regime"] == "alive"].copy()
+    moments = np.zeros(10)
+    res["effort"] = np.asarray(eff_grid[res["effort"].to_numpy().astype(int)])
+    res["effort_t_1"] = np.asarray(eff_grid[res["effort_t_1"].to_numpy().astype(int)])
+    res["wealth"] = np.asarray(calc_savingsgrid(res["wealth"].to_numpy()))
+    res["saving"] = np.asarray(calc_savingsgrid(res["saving"].to_numpy()))
+    for interval in range(1, 6):
+        median_wealth_10y_h = res.loc[
+            (res["period"] >= (interval * 5))
+            & (res["period"] < ((interval + 1) * 5))
+            & (res["health"] == 1),
+            ["wealth"],
+        ].median()
+        median_wealth_10y_uh = res.loc[
+            (res["period"] >= (interval * 5))
+            & (res["period"] < ((interval + 1) * 5))
+            & (res["health"] == 0),
+            ["wealth"],
+        ].median()
+        moments[interval - 1] = median_wealth_10y_h.iloc[0]
+        moments[interval - 1 + 5] = median_wealth_10y_uh.iloc[0]
+    return moments

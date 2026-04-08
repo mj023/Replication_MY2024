@@ -1,18 +1,16 @@
-import optimagic as om
-from plotly.subplots import make_subplots
-import pandas as pd
-import numpy as np
-from jax import numpy as jnp
-import plotly.graph_objects as go
-from model_function import simulate_moments
-
-from matplotlib import pyplot as plt
-from matplotlib.patches import Rectangle
-import seaborn as sns
 import textwrap
 
+import numpy as np
+import optimagic as om
+import plotly.graph_objects as go
+import seaborn as sns
+from jax import numpy as jnp
+from matplotlib import pyplot as plt
+from matplotlib.patches import Rectangle
+from plotly.subplots import make_subplots
 
-def wrap_labels(ax, width, break_long_words=False):
+
+def wrap_labels(ax, width, *, break_long_words=False):
     labels = []
     for label in ax.get_xticklabels():
         text = label.get_text()
@@ -234,7 +232,7 @@ fig = om.criterion_plot(
     max_evaluations=1500,
 )
 fig.update_layout(
-    margin=dict(l=20, r=20, t=0, b=60),
+    margin={"l": 20, "r": 20, "t": 0, "b": 60},
 )
 fig.write_image("../plots/comp_algos.pdf")
 fig.show("firefox")
@@ -242,11 +240,6 @@ reader = om.SQLiteLogReader("../optim_results/pd_rand_1.db")
 history = reader.read_history()
 min_ind = np.argmin(np.asarray(history.fun))
 min_params = history.params[min_ind]
-# print(np.round(((simulate_moments(min_params)- empirical_moments)/empirical_moments)*100,decimals=3 ))
-
-""" optimal_moments = simulate_moments(min_params)
-np.savetxt("optimal_moments.csv", optimal_moments,
-              delimiter = ",") """
 optimal_moments = np.loadtxt("../results/optim_moments_boot.txt")
 
 np.asarray(optimal_moments)
@@ -306,7 +299,7 @@ fig.update_layout(
     xaxis_title_text="Age Group",
     yaxis_title_text="Employment share",
     yaxis_range=[0, 1],
-    margin=dict(l=20, r=20, t=0, b=60),
+    margin={"l": 20, "r": 20, "t": 0, "b": 60},
     height=200,
     width=400,
 )
@@ -421,7 +414,7 @@ fig.update_layout(
     yaxis2_title_text="Effort",
     yaxis_range=[0.5, 0.9],
     yaxis2_range=[0.5, 0.9],
-    margin=dict(l=20, r=20, t=20, b=80),
+    margin={"l": 20, "r": 20, "t": 20, "b": 80},
 )
 
 fig.write_image("../plots/eff.pdf", height=300, width=1000)
@@ -546,7 +539,7 @@ fig.update_layout(
     yaxis2_title_text="Labor Income (Ths.)",
     yaxis_range=[0, 120],
     yaxis2_range=[0, 120],
-    margin=dict(l=20, r=20, t=20, b=80),
+    margin={"l": 20, "r": 20, "t": 20, "b": 80},
 )
 
 fig.write_image(
@@ -582,7 +575,7 @@ fig.update_layout(
     xaxis_title_text="Age Group",
     yaxis_title_text="Wealth (Ths.)",
     yaxis_range=[0, 120],
-    margin=dict(l=20, r=20, t=0, b=60),
+    margin={"l": 20, "r": 20, "t": 0, "b": 60},
     height=200,
     width=400,
 )

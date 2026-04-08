@@ -73,9 +73,6 @@ per-file-ignores."src/*" = [
   "PLR2004", # Magic values (replication uses numeric constants throughout)
   "T201",    # print found (replication scripts use print)
 ]
-per-file-ignores."src/{estimation,plot,soep_data,stderrors_sens,utils}.py" = [
-  "ALL", # TEMPORARY: Out-of-scope legacy replication scripts, not updated
-]
 per-file-ignores."src/test_*" = [
   "ANN",     # Annotations
   "INP001",  # Implicit namespace package
@@ -108,13 +105,6 @@ rules.ineffective-final = "error"
 rules.invalid-enum-member-annotation = "error"
 rules.invalid-ignore-comment = "error"
 rules.invalid-legacy-positional-parameter = "error"
-src.exclude = [
-  "src/estimation.py",
-  "src/plot.py",
-  "src/soep_data.py",
-  "src/stderrors_sens.py",
-  "src/utils.py",
-]
 
 [tool.pytest]
 ini_options.addopts = [ "--pdbcls=pdbp:Pdb" ]

@@ -1,12 +1,9 @@
-from jax import numpy as jnp
-import statsmodels.formula.api as smf
-from scipy import linalg
 import numpy as np
 import optimagic as om
-from model_function import simulate_moments, simulate_moments_boot
 import pandas as pd
-from utils import qreg
+from scipy import linalg
 
+from utils import qreg
 
 empirical_moments = np.asarray(
     [
@@ -202,10 +199,6 @@ step_size = np.full((42), 0.001)
 
 
 print(np.asarray(list(min_params.values())))
-""" G_hat = om.first_derivative(simulate_moments, min_params, method='central', step_size=step_size)
-G_hat = np.vstack([G_hat.derivative[x] for x in param_order])
-np.savetxt('g_hat.txt', G_hat) """
-
 G_hat = np.loadtxt("../results/g_hat_2.txt")
 
 
@@ -219,7 +212,7 @@ est_onestep = np.zeros((k, 1))
 moment_loadings = np.zeros_like(moment_jacob)
 
 for i in range(k):
-    transf_jacob = np.zeros((k))
+    transf_jacob = np.zeros(k)
     transf_jacob[i] = 1
     y = moment_jacob @ (np.linalg.solve(GpG, transf_jacob))
     moment_jacob_perp = linalg.null_space(moment_jacob.T)
@@ -298,6 +291,3 @@ parameters["Estimate2"] = np.round(
 )
 parameters["Std. Error2"] = param_ses[21:]
 print(parameters.to_latex(index=False, float_format="%.5f"))
-
-""" optim_moments = simulate_moments_boot(min_params)
-np.savetxt('../results/optim_moments_boot.txt', optim_moments) """

@@ -1,5 +1,4 @@
 import jax.numpy as jnp
-
 import numpy as np
 from scipy.optimize import linprog
 
@@ -82,7 +81,4 @@ def qreg(y, X, tau):
     if not res.success:
         raise ValueError("Linear programming failed: " + res.message)
 
-    # Extract beta coefficients from solution vector
-    bhat = res.x[-m:]
-
-    return bhat
+    return res.x[-m:]

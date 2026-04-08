@@ -1,11 +1,12 @@
 import os
-import optimagic as om
-from plotly.subplots import make_subplots
-import pandas as pd
+
 import numpy as np
-from jax import numpy as jnp
+import optimagic as om
+import pandas as pd
 import plotly.graph_objects as go
-from model_function import simulate_wealth, simulate_moments
+from jax import numpy as jnp
+
+from model_function import simulate_wealth
 
 # Set working directory
 path = "/home/mj023/Downloads/Soep/SOEP_V38"
@@ -30,10 +31,7 @@ pl = pd.concat(gather_frame) """
 # Merge with other datasets
 def merge_data(base, filename, suffix):
     df = pd.read_stata(filename)
-    merged = pd.merge(
-        base, df, on=["pid", "syear"], how="left", suffixes=("", f"_{suffix}")
-    )
-    return merged
+    return base.merge(df, on=["pid", "syear"], how="left", suffixes=("", f"_{suffix}"))
 
 
 pl = merge_data(pl, "pgen.dta", "pgen")
@@ -68,7 +66,7 @@ pl["ple0008"] = pl["ple0008"].cat.codes - 2
 
 pl["health_cat"] = np.where(pl["ple0008"].isin([1, 2, 3]), 1, 0)
 print(pl["health_cat"])
-pl = pl[(pl["college"].notnull()) & (pl["health_cat"].notnull()) & (pl["age"] >= 25)]
+pl = pl[(pl["college"].notna()) & (pl["health_cat"].notna()) & (pl["age"] >= 25)]
 
 disc_f = pl["y11101"].cat.categories
 pl["y11101"] = pl["y11101"].cat.codes
@@ -194,7 +192,7 @@ fig.update_layout(
     xaxis_title_text="Age Group",
     yaxis_title_text="Wealth (Ths.)",
     yaxis_range=[0, 120],
-    margin=dict(l=20, r=20, t=0, b=60),
+    margin={"l": 20, "r": 20, "t": 0, "b": 60},
     height=200,
     width=400,
 )
@@ -232,7 +230,7 @@ fig.update_layout(
     xaxis_title_text="Age Group",
     yaxis_title_text="Wealth Ratio",
     yaxis_range=[0, 8],
-    margin=dict(l=20, r=20, t=0, b=60),
+    margin={"l": 20, "r": 20, "t": 0, "b": 60},
     height=200,
     width=400,
 )

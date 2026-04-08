@@ -1,13 +1,13 @@
-@.ai-instructions/profiles/tier-a.md
-@.ai-instructions/modules/jax.md @.ai-instructions/modules/optimagic.md
+@.ai-instructions/profiles/tier-a.md @.ai-instructions/modules/jax.md
+@.ai-instructions/modules/optimagic.md
 
 # Replication of Mahler & Yum (2024)
 
 ## Overview
 
-Replication of "Lifestyle Behaviors and Wealth-Health Gaps in Germany"
-(Econometrica, 2024) using pylcm. Consumption-savings model with health,
-exercise, and heterogeneous discount factors.
+Replication of "Lifestyle Behaviors and Wealth-Health Gaps in Germany" (Econometrica,
+2024\) using pylcm. Consumption-savings model with health, exercise, and heterogeneous
+discount factors.
 
 ## Build & Test
 

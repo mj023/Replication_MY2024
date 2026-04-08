@@ -1,9 +1,10 @@
-import jax
-from jax import numpy as jnp
-import numpy as np
 import time
-import pandas as pd
+
+import jax
+import numpy as np
 import optimagic as om
+import pandas as pd
+from jax import numpy as jnp
 
 from model_function import simulate_moments
 
@@ -287,23 +288,21 @@ algo_pounders = om.algos.tao_pounders(stopping_maxiter=400)
 log_opts = om.SQLiteLogOptions(path="pd_var_2.db", if_database_exists="replace")
 key = jax.random.key(33)
 
-vals = jax.random.uniform(key, (42), maxval=0.4)
+vals = jax.random.uniform(key, (42,), maxval=0.4)
 start_params_keys = list(start_params.keys())
 
 
 def criterion_func(params):
     sim_moments = simulate_moments(params)
     e = sim_moments - empirical_moments
-    g_theta = e.T @ W_var @ e
-    return g_theta
+    return e.T @ W_var @ e
 
 
 @om.mark.least_squares
 def criterion_func_sqr(params):
     sim_moments = simulate_moments(params)
     e = sim_moments - empirical_moments
-    residuals = e @ W_root
-    return residuals
+    return e @ W_root
 
 
 lower_bounds = {
@@ -396,14 +395,14 @@ upper_bounds = {
 }
 
 for i in range(42):
-    start_params[start_params_keys[i]] = np.asarray(
+    start_params[start_params_keys[i]] = float(
         start_params[start_params_keys[i]]
         + start_params[start_params_keys[i]] * (vals[i] - 0.2)
     )
-    lower_bounds[start_params_keys[i]] = np.asarray(lower_bounds[start_params_keys[i]])
-    upper_bounds[start_params_keys[i]] = np.asarray(upper_bounds[start_params_keys[i]])
-start_params["conp"] = np.asarray(0.9)
-start_params["beta_mean"] = np.asarray(0.93)
+    lower_bounds[start_params_keys[i]] = float(lower_bounds[start_params_keys[i]])
+    upper_bounds[start_params_keys[i]] = float(upper_bounds[start_params_keys[i]])
+start_params["conp"] = 0.9
+start_params["beta_mean"] = 0.93
 bounds = om.Bounds(lower=lower_bounds, upper=upper_bounds)
 
 print(start_params)

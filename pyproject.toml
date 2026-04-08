@@ -41,6 +41,7 @@ metadata.allow-direct-references = true
 version.source = "vcs"
 
 [tool.ruff]
+exclude = [ "src/_version.py" ]
 fix = true
 unsafe-fixes = false
 [tool.ruff.lint]

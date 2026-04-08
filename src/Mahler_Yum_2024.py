@@ -25,6 +25,7 @@ from lcm.typing import (
     FloatND,
     Period,
 )
+from lcm.utils.dispatchers import productmap
 
 _DATA_DIR = Path(__file__).parent
 
@@ -104,10 +105,53 @@ eff_grid = jnp.linspace(0, 1, 40)
 
 prod_shock_grid = lcm.shocks.ar1.Rouwenhorst(n_points=5, rho=rho, mu=0, sigma=1)
 
+SIGMA = 2.0
 
-# ======================================================================================
-# Model functions
-# ======================================================================================
+const_healthtr: float = -0.906
+age_const = jnp.asarray([0.0, -0.289, -0.644, -0.881, -1.138, -1.586, -1.586, -1.586])
+eff_param = jnp.asarray([0.693, 0.734])
+healthy_dummy: float = 2.311
+htype_dummy: float = 0.632
+college_dummy: float = 0.238
+
+
+def _health_trans(period, health, eff, eff_1, edu, ht):
+    y = (
+        const_healthtr
+        + age_const[period]
+        + edu * college_dummy
+        + health * healthy_dummy
+        + ht * htype_dummy
+        + eff_grid[eff] * eff_param[0]
+        + eff_grid[eff_1] * eff_param[1]
+    )
+    return jnp.exp(y) / (1.0 + jnp.exp(y))
+
+
+_health_trans_variables = ("period", "health", "eff", "eff_1", "edu", "ht")
+_mapped_health_trans = productmap(
+    func=_health_trans,
+    variables=_health_trans_variables,
+    batch_sizes=dict.fromkeys(_health_trans_variables, 0),
+)
+
+tr2yp_grid = jnp.zeros((38, 2, 40, 40, 2, 2, 2))
+_j = jnp.floor_divide(jnp.arange(38), 5)
+tr2yp_grid = tr2yp_grid.at[:, :, :, :, :, :, 1].set(
+    _mapped_health_trans(
+        period=_j,
+        health=jnp.arange(2),
+        eff=jnp.arange(40),
+        eff_1=jnp.arange(40),
+        edu=jnp.arange(2),
+        ht=jnp.arange(2),
+    )
+)
+tr2yp_grid = tr2yp_grid.at[:, :, :, :, :, :, 0].set(
+    1.0 - tr2yp_grid[:, :, :, :, :, :, 1]
+)
+
+
 # --------------------------------------------------------------------------------------
 # Utility function
 # --------------------------------------------------------------------------------------
@@ -363,6 +407,13 @@ MAHLER_YUM_MODEL = Model(
     regimes={"alive": ALIVE_REGIME, "dead": DEAD_REGIME},
     ages=ages,
     regime_id_class=RegimeId,
+    fixed_params={
+        "alive": {
+            "cons_util": {"sigma": SIGMA},
+            "next_health": {"probs_array": tr2yp_grid},
+            "next_regime": {"probs_array": spgrid},
+        },
+    },
 )
 
 

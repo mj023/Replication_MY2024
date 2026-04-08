@@ -1,10 +1,17 @@
 from pathlib import Path
 
+import jax.numpy as jnp
 import numpy as np
+import pandas as pd
 import pytest
-from jax import numpy as jnp
+from lcm.pandas_utils import initial_conditions_from_dataframe
 
-from Mahler_Yum_2024 import MAHLER_YUM_MODEL, START_PARAMS, ages, prod_shock_grid
+from Mahler_Yum_2024 import (
+    MAHLER_YUM_MODEL,
+    START_PARAMS,
+    ages,
+    prod_shock_grid,
+)
 from model_function import create_inputs
 
 _REGRESSION_DIR = Path(__file__).parent.parent / "regression_data"
@@ -15,17 +22,21 @@ def test_model_solves_and_simulates():
     start_params_without_beta = {
         k: v for k, v in START_PARAMS.items() if k not in ("beta_mean", "beta_std")
     }
-    common_params, initial_states, _discount_factor_type = create_inputs(
-        seed=0,
-        n_simulation_subjects=4,
-        **start_params_without_beta,
+    common_params, initial_conditions_df, _discount_factor_type = create_inputs(
+        seed=0, n_simulation_subjects=4, **start_params_without_beta
     )
-    params = {"alive": {"discount_factor": START_PARAMS["beta_mean"], **common_params}}
+    shock_cols = ["productivity_shock", "adjustment_cost"]
     initial_conditions = {
-        **initial_states,
-        "regime": jnp.full(
-            4, MAHLER_YUM_MODEL.regime_names_to_ids["alive"], dtype=jnp.int32
+        **initial_conditions_from_dataframe(
+            df=initial_conditions_df.drop(columns=shock_cols), model=MAHLER_YUM_MODEL
         ),
+        **{col: jnp.array(initial_conditions_df[col]) for col in shock_cols},
+    }
+    params = {
+        "alive": {
+            "discount_factor": START_PARAMS["beta_mean"],
+            **common_params,
+        },
     }
     result = MAHLER_YUM_MODEL.simulate(
         params=params,
@@ -55,46 +66,64 @@ def test_period_0_policy_matches_old_pylcm():
     """
     old_health = np.load(_REGRESSION_DIR / "old_initial_health.npy")
     old_effort = np.load(_REGRESSION_DIR / "old_initial_effort.npy")
-    old_prodshock = np.load(_REGRESSION_DIR / "old_initial_prodshock.npy")
-    old_adjcost = np.load(_REGRESSION_DIR / "old_initial_adjcost.npy")
     old_discount = np.load(_REGRESSION_DIR / "old_initial_discount.npy")
 
     start_params_without_beta = {
         k: v for k, v in START_PARAMS.items() if k not in ("beta_mean", "beta_std")
     }
-    common_params, new_initial_states, _ = create_inputs(
-        seed=32,
-        n_simulation_subjects=10000,
-        **start_params_without_beta,
+    common_params, new_ic_df, _ = create_inputs(
+        seed=32, n_simulation_subjects=10000, **start_params_without_beta
     )
 
+    # Build DataFrame with OLD initial conditions using string labels
+    health_labels = {0: "bad", 1: "good"}
+    effort_labels = {i: f"class{i}" for i in range(40)}
+
+    old_prodshock = np.load(_REGRESSION_DIR / "old_initial_prodshock.npy")
+    old_adjcost = np.load(_REGRESSION_DIR / "old_initial_adjcost.npy")
+
     xvalues = prod_shock_grid.get_gridpoints()
-    uniform_gridpoints = jnp.linspace(0, 1, 5)
+    uniform_gridpoints = np.linspace(0, 1, 5)
 
-    initial_states = {
-        "age": jnp.full(10000, ages.values[0]),
-        "wealth": jnp.full(10000, 0, dtype=jnp.int8),
-        "health": jnp.array(old_health),
-        "health_type": new_initial_states["health_type"],
-        "effort_t_1": jnp.array(old_effort),
-        "productivity_shock": xvalues[old_prodshock],
-        "adjustment_cost": uniform_gridpoints[old_adjcost],
-        "education": new_initial_states["education"],
-        "productivity": new_initial_states["productivity"],
-    }
-    discount_factor_type = jnp.array(old_discount)
+    old_ic_df = pd.DataFrame(
+        {
+            "regime": "alive",
+            "age": ages.values[0],
+            "wealth": np.zeros(10000),
+            "health": pd.Categorical(
+                [health_labels[int(v)] for v in old_health],
+                categories=["bad", "good"],
+            ),
+            "effort_t_1": pd.Categorical(
+                [effort_labels[int(v)] for v in old_effort],
+                categories=[f"class{i}" for i in range(40)],
+            ),
+            "education": new_ic_df["education"],
+            "productivity": new_ic_df["productivity"],
+            "health_type": new_ic_df["health_type"],
+            "productivity_shock": np.asarray(xvalues[old_prodshock]),
+            "adjustment_cost": uniform_gridpoints[old_adjcost],
+        }
+    )
 
+    shock_cols = ["productivity_shock", "adjustment_cost"]
+    discount_factor_type = old_discount
     beta_mean = START_PARAMS["beta_mean"]
     beta_std = START_PARAMS["beta_std"]
 
     all_working = []
-    for beta_val, type_id in [(beta_mean - beta_std, 0), (beta_mean + beta_std, 1)]:
+    for beta_val, type_id in [
+        (beta_mean - beta_std, 0),
+        (beta_mean + beta_std, 1),
+    ]:
         mask = discount_factor_type == type_id
-        n_type = int(mask.sum())
-        type_initial = {k: v[mask] for k, v in initial_states.items()}
-        type_initial["regime"] = jnp.full(
-            n_type, MAHLER_YUM_MODEL.regime_names_to_ids["alive"], dtype=jnp.int32
-        )
+        type_df = old_ic_df.loc[mask].reset_index(drop=True)
+        type_initial = {
+            **initial_conditions_from_dataframe(
+                df=type_df.drop(columns=shock_cols), model=MAHLER_YUM_MODEL
+            ),
+            **{col: jnp.array(type_df[col]) for col in shock_cols},
+        }
 
         result = MAHLER_YUM_MODEL.simulate(
             params={"alive": {"discount_factor": beta_val, **common_params}},
@@ -110,7 +139,6 @@ def test_period_0_policy_matches_old_pylcm():
     working = np.concatenate(all_working)
 
     # Period-0 working distribution must match old pylcm 167a3a6 exactly.
-    # Actions at period 0 are deterministic (no stochastic transitions yet).
     assert (working == 0).sum() == 109
     assert (working == 1).sum() == 5406
     assert (working == 2).sum() == 4485

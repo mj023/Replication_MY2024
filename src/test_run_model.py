@@ -1,27 +1,38 @@
 from pathlib import Path
-import jax
-from jax import numpy as jnp
-from model_function import create_inputs
-from Mahler_Yum_2024 import MAHLER_YUM_MODEL, START_PARAMS, ages, prod_shock_grid
+
 import numpy as np
 import pytest
+from jax import numpy as jnp
+
+from Mahler_Yum_2024 import MAHLER_YUM_MODEL, START_PARAMS, ages, prod_shock_grid
+from model_function import create_inputs
 
 _REGRESSION_DIR = Path(__file__).parent.parent / "regression_data"
 
+
 def test_model_solves_and_simulates():
     """Smoke test: model runs end-to-end with small n."""
-    start_params_without_beta = {k: v for k, v in START_PARAMS.items() if k not in ('beta_mean', 'beta_std')}
+    start_params_without_beta = {
+        k: v for k, v in START_PARAMS.items() if k not in ("beta_mean", "beta_std")
+    }
     common_params, initial_states, _discount_factor_type = create_inputs(
-        seed=0, n_simulation_subjects=4, **start_params_without_beta,
+        seed=0,
+        n_simulation_subjects=4,
+        **start_params_without_beta,
     )
     params = {"alive": {"discount_factor": START_PARAMS["beta_mean"], **common_params}}
     initial_conditions = {
         **initial_states,
-        "regime": jnp.full(4, MAHLER_YUM_MODEL.regime_names_to_ids["alive"], dtype=jnp.int32),
+        "regime": jnp.full(
+            4, MAHLER_YUM_MODEL.regime_names_to_ids["alive"], dtype=jnp.int32
+        ),
     }
     result = MAHLER_YUM_MODEL.simulate(
-        params=params, initial_conditions=initial_conditions,
-        period_to_regime_to_V_arr=None, seed=12345, log_level="off",
+        params=params,
+        initial_conditions=initial_conditions,
+        period_to_regime_to_V_arr=None,
+        seed=12345,
+        log_level="off",
     )
     df = result.to_dataframe(use_labels=False)
     assert len(df) > 0
@@ -48,9 +59,13 @@ def test_period_0_policy_matches_old_pylcm():
     old_adjcost = np.load(_REGRESSION_DIR / "old_initial_adjcost.npy")
     old_discount = np.load(_REGRESSION_DIR / "old_initial_discount.npy")
 
-    start_params_without_beta = {k: v for k, v in START_PARAMS.items() if k not in ('beta_mean', 'beta_std')}
+    start_params_without_beta = {
+        k: v for k, v in START_PARAMS.items() if k not in ("beta_mean", "beta_std")
+    }
     common_params, new_initial_states, _ = create_inputs(
-        seed=32, n_simulation_subjects=10000, **start_params_without_beta,
+        seed=32,
+        n_simulation_subjects=10000,
+        **start_params_without_beta,
     )
 
     xvalues = prod_shock_grid.get_gridpoints()
@@ -69,20 +84,24 @@ def test_period_0_policy_matches_old_pylcm():
     }
     discount_factor_type = jnp.array(old_discount)
 
-    beta_mean = START_PARAMS['beta_mean']
-    beta_std = START_PARAMS['beta_std']
+    beta_mean = START_PARAMS["beta_mean"]
+    beta_std = START_PARAMS["beta_std"]
 
     all_working = []
     for beta_val, type_id in [(beta_mean - beta_std, 0), (beta_mean + beta_std, 1)]:
         mask = discount_factor_type == type_id
         n_type = int(mask.sum())
         type_initial = {k: v[mask] for k, v in initial_states.items()}
-        type_initial["regime"] = jnp.full(n_type, MAHLER_YUM_MODEL.regime_names_to_ids["alive"], dtype=jnp.int32)
+        type_initial["regime"] = jnp.full(
+            n_type, MAHLER_YUM_MODEL.regime_names_to_ids["alive"], dtype=jnp.int32
+        )
 
         result = MAHLER_YUM_MODEL.simulate(
             params={"alive": {"discount_factor": beta_val, **common_params}},
             initial_conditions=type_initial,
-            period_to_regime_to_V_arr=None, seed=42, log_level="off",
+            period_to_regime_to_V_arr=None,
+            seed=42,
+            log_level="off",
         )
         df = result.to_dataframe(use_labels=False)
         p0 = df[(df["regime"] == "alive") & (df["period"] == 0)]

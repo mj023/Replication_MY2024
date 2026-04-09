@@ -55,15 +55,16 @@ def create_effort_cost_grid(effort_cost):
     """Interpolate effort cost knots to full period grid.
 
     Args:
-        effort_cost: DataFrame with MultiIndex columns (education, health)
-            and period index.
+        effort_cost: MappingLeaf with nested dict
+            {"low": {"bad": [...], "good": [...]}, "high": {...}}.
 
     """
+    knot_periods = np.array([1, 12, 20, 31])
     grid = jnp.zeros((n_periods, 2, 2))
     for i, edu in enumerate(["low", "high"]):
         for j, health in enumerate(["bad", "good"]):
-            knots = np.asarray(effort_cost[f"{edu}_{health}"])
-            spline = scipy_interp1d(np.asarray(effort_cost.index), knots, kind="cubic")
+            knots = np.asarray(effort_cost.data[edu][health])
+            spline = scipy_interp1d(knot_periods, knots, kind="cubic")
             interp_points = np.arange(1, 31)
             temp_grid = jnp.asarray(spline(interp_points))
             grid = grid.at[0:30, i, j].set(temp_grid)

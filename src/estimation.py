@@ -161,7 +161,7 @@ lower_bounds = {
         "bad": dict.fromkeys(_wd_ages, 0.0),
         "good": dict.fromkeys(_wd_ages, 0.0),
     },
-    "education_disutility_adj": 0.0,
+    "education_disutility_adjustment": 0.0,
     "effort_cost": {
         "low": {
             "bad": dict.fromkeys(_ec_ages, 0.0),
@@ -192,7 +192,7 @@ upper_bounds = {
         "bad": dict.fromkeys(_wd_ages, 4.0),
         "good": dict.fromkeys(_wd_ages, 4.0),
     },
-    "education_disutility_adj": 1.5,
+    "education_disutility_adjustment": 1.5,
     "effort_cost": {
         "low": {
             "bad": dict.fromkeys(_ec_ages, 3.0),

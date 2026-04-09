@@ -104,26 +104,46 @@ prod_shock_grid = lcm.shocks.ar1.Rouwenhorst(
 
 risk_aversion = 2.0
 
-health_intercept: float = -0.906
-health_age_effects = jnp.asarray(
-    [0.0, -0.289, -0.644, -0.881, -1.138, -1.586, -1.586, -1.586]
-)
-health_effort_coefficients = jnp.asarray([0.693, 0.734])
-good_health_coefficient: float = 2.311
-health_type_coefficient: float = 0.632
-college_coefficient: float = 0.238
+health_intercept = -0.906
+health_age_effects = pd.Series(
+    {
+        25: 0.0,
+        35: -0.289,
+        45: -0.644,
+        55: -0.881,
+        65: -1.138,
+        75: -1.586,
+        85: -1.586,
+        95: -1.586,
+    },
+).reindex(np.asarray(ages.values), method="ffill")
+health_age_effects.index.name = "age"
+health_effort_coefficient = 0.693
+lagged_health_effort_coefficient = 0.734
+good_health_coefficient = 2.311
+health_type_coefficient = 0.632
+college_coefficient = 0.238
 
 
 def _load_survival_probs():
-    """Load survival probabilities as array (period x education x health)."""
-    surv_low_edu = np.loadtxt(_DATA_DIR / "surv_HS.txt")
-    surv_high_edu = np.loadtxt(_DATA_DIR / "surv_CL.txt")
-    probs = jnp.zeros((38, 2, 2))
-    probs = probs.at[:, 0, 0].set(surv_low_edu[:, 1])  # low edu, bad health
-    probs = probs.at[:, 1, 0].set(surv_high_edu[:, 1])  # high edu, bad health
-    probs = probs.at[:, 0, 1].set(surv_low_edu[:, 0])  # low edu, good health
-    probs = probs.at[:, 1, 1].set(surv_high_edu[:, 0])  # high edu, good health
-    return probs.at[-1].set(0.0)  # certain death at terminal period
+    """Load survival probabilities as labeled Series (age x education x health)."""
+    surv_hs = np.loadtxt(_DATA_DIR / "surv_HS.txt")
+    surv_cl = np.loadtxt(_DATA_DIR / "surv_CL.txt")
+    age_values = np.asarray(ages.values)
+    n_data_rows = len(surv_hs)
+    records = []
+    for period_idx, age in enumerate(age_values):
+        for edu_label, surv_data in [("low", surv_hs), ("high", surv_cl)]:
+            for health_idx, health_label in enumerate(["good", "bad"]):
+                if period_idx >= n_data_rows - 1:
+                    prob = 0.0  # certain death at terminal transition
+                else:
+                    prob = surv_data[period_idx, health_idx]
+                records.append((age, edu_label, health_label, prob))
+    df = pd.DataFrame(
+        records, columns=["age", "education", "health", "survival_probability"]
+    )
+    return df.set_index(["age", "education", "health"])["survival_probability"]
 
 
 survival_probs = _load_survival_probs()
@@ -197,6 +217,7 @@ def effort_cost(
     effort: DiscreteAction,
     effort_elasticity: float,
     effort_cost_grid: FloatND,
+    effort_grid: FloatND,
 ) -> FloatND:
     return (
         effort_cost_grid[period, education, health]
@@ -223,6 +244,7 @@ def income(
     productivity: DiscreteState,
     scaled_productivity_shock: FloatND,
     base_income_grid: FloatND,
+    productivity_type_multiplier: FloatND,
 ) -> FloatND:
     return (
         base_income_grid[period, health, education]
@@ -255,6 +277,7 @@ def pension(
     productivity: DiscreteState,
     base_income_grid: FloatND,
     pension_replacement_rate: float,
+    productivity_type_multiplier: FloatND,
 ) -> FloatND:
     return jnp.where(
         period > retirement_period,
@@ -281,18 +304,19 @@ def next_health(
     good_health_coefficient: float,
     health_type_coefficient: float,
     college_coefficient: float,
-    health_effort_coefficients: FloatND,
+    health_effort_coefficient: float,
+    lagged_health_effort_coefficient: float,
+    effort_grid: FloatND,
 ) -> FloatND:
     """Compute health transition probabilities via logit model."""
-    age_group = period // 5
     y = (
         health_intercept
-        + health_age_effects[age_group]
+        + health_age_effects[period]
         + education * college_coefficient
         + health * good_health_coefficient
         + health_type * health_type_coefficient
-        + effort_grid[effort] * health_effort_coefficients[0]
-        + effort_grid[lagged_effort] * health_effort_coefficients[1]
+        + effort_grid[effort] * health_effort_coefficient
+        + effort_grid[lagged_effort] * lagged_health_effort_coefficient
     )
     prob_good = jnp.exp(y) / (1.0 + jnp.exp(y))
     return jnp.array([1.0 - prob_good, prob_good])
@@ -393,6 +417,8 @@ MAHLER_YUM_MODEL = Model(
     regime_id_class=RegimeId,
     fixed_params={
         "alive": {
+            "effort_grid": effort_grid,
+            "productivity_type_multiplier": productivity_type_multiplier,
             "consumption_utility": {"sigma": risk_aversion},
             "next_health": {
                 "health_intercept": health_intercept,
@@ -400,7 +426,8 @@ MAHLER_YUM_MODEL = Model(
                 "good_health_coefficient": good_health_coefficient,
                 "health_type_coefficient": health_type_coefficient,
                 "college_coefficient": college_coefficient,
-                "health_effort_coefficients": health_effort_coefficients,
+                "health_effort_coefficient": health_effort_coefficient,
+                "lagged_health_effort_coefficient": lagged_health_effort_coefficient,
             },
             "next_regime": {"transition_probs": survival_probs},
         },
@@ -424,7 +451,7 @@ START_PARAMS = {
             "65": 1.71439043350863,
         },
     },
-    "education_disutility_adj": 0.807247922589072,
+    "education_disutility_adjustment": 0.807247922589072,
     # Effort cost knot values at ages 27, 49, 65, 87
     "effort_cost": {
         "low": {

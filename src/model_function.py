@@ -44,12 +44,12 @@ def _age_keys_to_periods(age_keyed_dict):
     return knot_periods, values
 
 
-def create_work_disutility_grid(work_disutility, education_disutility_adj):
+def create_work_disutility_grid(work_disutility, education_disutility_adjustment):
     """Interpolate work disutility knots to full period grid.
 
     Args:
         work_disutility: Dict {"bad": {"27": v, ...}, "good": {"27": v, ...}}.
-        education_disutility_adj: Scalar education adjustment factor.
+        education_disutility_adjustment: Scalar education adjustment factor.
 
     """
     grid = jnp.zeros((retirement_period + 1, 2, 2))
@@ -58,7 +58,9 @@ def create_work_disutility_grid(work_disutility, education_disutility_adj):
         spline = scipy_interp1d(knot_periods, knot_values, kind="cubic")
         interp_points = jnp.arange(1, retirement_period + 2)
         temp_grid = jnp.asarray(spline(interp_points))
-        grid = grid.at[:, 0, j].set(temp_grid * jnp.exp(education_disutility_adj))
+        grid = grid.at[:, 0, j].set(
+            temp_grid * jnp.exp(education_disutility_adjustment)
+        )
         grid = grid.at[:, 1, j].set(temp_grid)
     return grid
 
@@ -158,7 +160,7 @@ def create_inputs(seed, n_simulation_subjects, params):
     xtrans = prod_shock_grid.get_transition_probs()
     ec_grid = create_effort_cost_grid(params["effort_cost"])
     wd_grid = create_work_disutility_grid(
-        params["work_disutility"], params["education_disutility_adj"]
+        params["work_disutility"], params["education_disutility_adjustment"]
     )
 
     model_params = {

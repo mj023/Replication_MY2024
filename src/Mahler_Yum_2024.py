@@ -527,11 +527,7 @@ START_PARAMS = {
 
 
 def _age_keys_to_periods(age_keyed_dict):
-    """Convert {"27": val, "41": val, ...} to period-indexed arrays.
-
-    The grid creation functions use period indexing for the interpolation knots.
-
-    """
+    """Convert {"27": val, "41": val, ...} to period-indexed arrays."""
     start_age = int(ages.values[0])
     step = int(ages.values[1] - ages.values[0])
     knot_ages = np.array([int(k) for k in age_keyed_dict])
@@ -540,51 +536,69 @@ def _age_keys_to_periods(age_keyed_dict):
     return knot_periods, values
 
 
-def create_work_disutility_grid(work_disutility, education_disutility_adjustment):
-    """Interpolate work disutility knots to full period grid.
+def _interpolate_knots(age_keyed_dict, period_range, flat_after=None):
+    """Cubic spline interpolation of age-keyed knots over a period range.
 
     Args:
-        work_disutility: Dict {"bad": {"27": v, ...}, "good": {"27": v, ...}}.
-        education_disutility_adjustment: Scalar education adjustment factor.
+        age_keyed_dict: Dict mapping age strings to values.
+        period_range: Array of periods to interpolate over.
+        flat_after: If set, extend the last knot value for periods beyond this.
 
     """
-    grid = jnp.zeros((retirement_period + 1, 2, 2))
-    for j, health in enumerate(["bad", "good"]):
-        knot_periods, knot_values = _age_keys_to_periods(work_disutility[health])
-        spline = scipy_interp1d(knot_periods, knot_values, kind="cubic")
-        interp_points = jnp.arange(1, retirement_period + 2)
-        temp_grid = jnp.asarray(spline(interp_points))
-        grid = grid.at[:, 0, j].set(
-            temp_grid * jnp.exp(education_disutility_adjustment)
-        )
-        grid = grid.at[:, 1, j].set(temp_grid)
-    return grid
+    knot_periods, knot_values = _age_keys_to_periods(age_keyed_dict)
+    spline = scipy_interp1d(knot_periods, knot_values, kind="cubic")
+    values = np.asarray(spline(period_range))
+    if flat_after is not None:
+        values[period_range >= flat_after] = knot_values[-1]
+    return values
+
+
+def create_work_disutility_grid(work_disutility, education_disutility_adjustment):
+    """Interpolate work disutility knots to a labeled Series."""
+    age_values = np.asarray(ages.values)
+    period_range = np.arange(1, retirement_period + 2)
+    records = []
+    for health in ["bad", "good"]:
+        values = _interpolate_knots(work_disutility[health], period_range)
+        for period_idx, age in enumerate(age_values):
+            for edu in ["low", "high"]:
+                if period_idx <= retirement_period:
+                    factor = (
+                        np.exp(education_disutility_adjustment) if edu == "low" else 1.0
+                    )
+                    val = values[period_idx] * factor
+                else:
+                    val = 0.0
+                records.append((age, edu, health, val))
+    df = pd.DataFrame(records, columns=["age", "education", "health", "value"])
+    return df.set_index(["age", "education", "health"])["value"]
 
 
 def create_effort_cost_grid(effort_cost):
-    """Interpolate effort cost knots to full period grid.
-
-    Args:
-        effort_cost: Nested dict
-            {"low": {"bad": {"27": v, ...}, ...}, "high": {...}}.
-
-    """
-    grid = jnp.zeros((n_periods, 2, 2))
-    for i, edu in enumerate(["low", "high"]):
-        for j, health in enumerate(["bad", "good"]):
-            knot_periods, knot_values = _age_keys_to_periods(effort_cost[edu][health])
-            spline = scipy_interp1d(knot_periods, knot_values, kind="cubic")
-            interp_points = np.arange(1, 31)
-            temp_grid = jnp.asarray(spline(interp_points))
-            grid = grid.at[0:30, i, j].set(temp_grid)
-            grid = grid.at[30:n_periods, i, j].set(knot_values[-1])
-    return grid
+    """Interpolate effort cost knots to a labeled Series (age x education x health)."""
+    age_values = np.asarray(ages.values)
+    period_range = np.arange(1, 31)
+    records = []
+    for edu in ["low", "high"]:
+        for health in ["bad", "good"]:
+            values = _interpolate_knots(effort_cost[edu][health], period_range)
+            last_knot = _age_keys_to_periods(effort_cost[edu][health])[1][-1]
+            for period_idx, age in enumerate(age_values):
+                if period_idx < len(period_range):
+                    val = values[period_idx]
+                else:
+                    val = last_knot
+                records.append((age, edu, health, val))
+    df = pd.DataFrame(records, columns=["age", "education", "health", "value"])
+    return df.set_index(["age", "education", "health"])["value"]
 
 
 def create_adjustment_cost_envelope(adjustment_cost):
-    """Build exponential adjustment cost envelope over periods."""
-    t = jnp.arange(n_periods)
-    return jnp.maximum(adjustment_cost[0] * jnp.exp(adjustment_cost[1] * t), 0)
+    """Build exponential adjustment cost envelope as a labeled Series (age)."""
+    age_values = np.asarray(ages.values)
+    t = np.arange(n_periods)
+    values = np.maximum(adjustment_cost[0] * np.exp(adjustment_cost[1] * t), 0)
+    return pd.Series(values, index=pd.Index(age_values, name="age"))
 
 
 # Initial type distribution arrays

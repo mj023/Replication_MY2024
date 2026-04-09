@@ -17,13 +17,14 @@ _REGRESSION_DIR = Path(__file__).parent.parent / "regression_data"
 
 
 def test_model_solves_and_simulates():
-    """Smoke test: model runs end-to-end with small n via model_solve_and_simulate."""
-    # Use a small-n variant by calling create_inputs + simulate directly
-    params_without_beta = {k: v for k, v in START_PARAMS.items() if k != "beta"}
-    common_params, initial_conditions_df, _discount_factor_type = create_inputs(
+    """Smoke test: model runs end-to-end with small n."""
+    params_without_beta = {
+        k: v for k, v in START_PARAMS.items() if k != "discount_factor"
+    }
+    common_params, initial_conditions_df, _discount_type = create_inputs(
         seed=0, n_simulation_subjects=4, params=params_without_beta
     )
-    beta = START_PARAMS["beta"]
+    beta = START_PARAMS["discount_factor"]
     assert isinstance(beta, pd.Series)
     initial_conditions = initial_conditions_from_dataframe(
         df=initial_conditions_df, model=MAHLER_YUM_MODEL
@@ -39,7 +40,7 @@ def test_model_solves_and_simulates():
     assert len(df) > 0
     assert "period" in df.columns
     assert "wealth" in df.columns
-    assert "working" in df.columns
+    assert "labor_supply" in df.columns
 
 
 @pytest.mark.skipif(
@@ -60,7 +61,9 @@ def test_period_0_policy_matches_old_pylcm():
     old_prodshock = np.load(_REGRESSION_DIR / "old_initial_prodshock.npy")
     old_adjcost = np.load(_REGRESSION_DIR / "old_initial_adjcost.npy")
 
-    params_without_beta = {k: v for k, v in START_PARAMS.items() if k != "beta"}
+    params_without_beta = {
+        k: v for k, v in START_PARAMS.items() if k != "discount_factor"
+    }
     common_params, new_ic_df, _ = create_inputs(
         seed=32, n_simulation_subjects=10000, params=params_without_beta
     )
@@ -80,7 +83,7 @@ def test_period_0_policy_matches_old_pylcm():
                 [health_labels[int(v)] for v in old_health],
                 categories=["bad", "good"],
             ),
-            "effort_t_1": pd.Categorical(
+            "lagged_effort": pd.Categorical(
                 [effort_labels[int(v)] for v in old_effort],
                 categories=[f"class{i}" for i in range(40)],
             ),
@@ -92,11 +95,11 @@ def test_period_0_policy_matches_old_pylcm():
         }
     )
 
-    beta = START_PARAMS["beta"]
+    beta = START_PARAMS["discount_factor"]
     assert isinstance(beta, pd.Series)
     discount_factor_type = old_discount
 
-    all_working = []
+    all_labor_supply = []
     for beta_val, type_id in [
         (beta["mean"] - beta["std"], 0),
         (beta["mean"] + beta["std"], 1),
@@ -116,15 +119,15 @@ def test_period_0_policy_matches_old_pylcm():
         )
         df = result.to_dataframe(use_labels=False)
         p0 = df[(df["regime"] == "alive") & (df["period"] == 0)]
-        all_working.append(p0["working"].values)
+        all_labor_supply.append(p0["labor_supply"].values)
 
-    working = np.concatenate(all_working)
+    labor_supply = np.concatenate(all_labor_supply)
 
-    # Period-0 working distribution must match old pylcm 167a3a6 exactly.
-    assert (working == 0).sum() == 109
-    assert (working == 1).sum() == 5406
-    assert (working == 2).sum() == 4485
-    np.testing.assert_allclose(working.mean(), 1.4376, atol=1e-4)
+    # Period-0 labor supply distribution must match old pylcm 167a3a6 exactly.
+    assert (labor_supply == 0).sum() == 109
+    assert (labor_supply == 1).sum() == 5406
+    assert (labor_supply == 2).sum() == 4485
+    np.testing.assert_allclose(labor_supply.mean(), 1.4376, atol=1e-4)
 
 
 if __name__ == "__main__":

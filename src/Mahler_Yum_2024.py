@@ -1,4 +1,4 @@
-"""Example specification for a consumption-savings model with health and exercise."""
+"""Replication of Mahler & Yum (2024): Lifestyle Behaviors and Wealth-Health Gaps."""
 
 from dataclasses import make_dataclass
 from functools import partial
@@ -30,26 +30,24 @@ from lcm.utils.dispatchers import productmap
 
 _DATA_DIR = Path(__file__).parent
 
-# --------------------------------------------------------------------------------------
-# Fixed Parameters
-# --------------------------------------------------------------------------------------
-avrgearn = 57706.57
-theta_val = jnp.array([jnp.exp(-0.2898), jnp.exp(0.2898)])
+avg_earnings_raw = 57706.57
+productivity_type_multiplier = jnp.array([jnp.exp(-0.2898), jnp.exp(0.2898)])
 ages = AgeGrid(start=25, stop=101, step="2Y")
-n = ages.n_periods
-retirement_age = 19
-taul = 0.128
-lamda = 1.0 - 0.321
-rho = 0.975
-r = 1.04**2.0
-tt0 = 0.115
-winit = jnp.array([43978, 48201])
-avrgearn = avrgearn / winit[1]
-mincon0 = 0.10
-mincon = mincon0 * avrgearn
+n_periods = ages.n_periods
+retirement_period = 19
+labor_tax_rate = 0.128
+tax_scale = 1.0 - 0.321
+shock_persistence = 0.975
+gross_interest_rate = 1.04**2.0
+benefit_rate = 0.115
+_wealth_normalization = jnp.array([43978, 48201])
+avg_earnings = avg_earnings_raw / _wealth_normalization[1]
+min_consumption_share = 0.10
+min_consumption = min_consumption_share * avg_earnings
 
 
-def calc_savingsgrid(x):
+def wealth_to_level(x):
+    """Convert grid index to wealth level via log-spaced transformation."""
     x = ((jnp.log(10.0**2) - jnp.log(10.0**0)) / 49) * x
     x = jnp.exp(x)
     xgrid = x - 10.0 ** (0.0)
@@ -57,18 +55,15 @@ def calc_savingsgrid(x):
     return xgrid * (30 - 0) + 0
 
 
-# --------------------------------------------------------------------------------------
-# Categorical variables
-# --------------------------------------------------------------------------------------
 @categorical(ordered=True)
-class WorkingStatus:
+class LaborSupply:
     retired: int
-    part: int
-    full: int
+    part_time: int
+    full_time: int
 
 
 @categorical(ordered=True)
-class EducationStatus:
+class Education:
     low: int
     high: int
 
@@ -102,45 +97,49 @@ class RegimeId:
     dead: int
 
 
-eff_grid = jnp.linspace(0, 1, 40)
+effort_grid = jnp.linspace(0, 1, 40)
 
-prod_shock_grid = lcm.shocks.ar1.Rouwenhorst(n_points=5, rho=rho, mu=0, sigma=1)
+prod_shock_grid = lcm.shocks.ar1.Rouwenhorst(
+    n_points=5, rho=shock_persistence, mu=0, sigma=1
+)
 
-SIGMA = 2.0
+risk_aversion = 2.0
 
-const_healthtr: float = -0.906
-age_const = jnp.asarray([0.0, -0.289, -0.644, -0.881, -1.138, -1.586, -1.586, -1.586])
-eff_param = jnp.asarray([0.693, 0.734])
-healthy_dummy: float = 2.311
-htype_dummy: float = 0.632
-college_dummy: float = 0.238
+health_intercept: float = -0.906
+health_age_effects = jnp.asarray(
+    [0.0, -0.289, -0.644, -0.881, -1.138, -1.586, -1.586, -1.586]
+)
+health_effort_coefficients = jnp.asarray([0.693, 0.734])
+good_health_coefficient: float = 2.311
+health_type_coefficient: float = 0.632
+college_coefficient: float = 0.238
 
 
-def _health_trans(period, health, eff, eff_1, edu, ht):
+def _health_transition(period, health, eff, eff_1, edu, ht):
     y = (
-        const_healthtr
-        + age_const[period]
-        + edu * college_dummy
-        + health * healthy_dummy
-        + ht * htype_dummy
-        + eff_grid[eff] * eff_param[0]
-        + eff_grid[eff_1] * eff_param[1]
+        health_intercept
+        + health_age_effects[period]
+        + edu * college_coefficient
+        + health * good_health_coefficient
+        + ht * health_type_coefficient
+        + effort_grid[eff] * health_effort_coefficients[0]
+        + effort_grid[eff_1] * health_effort_coefficients[1]
     )
     return jnp.exp(y) / (1.0 + jnp.exp(y))
 
 
 _health_trans_variables = ("period", "health", "eff", "eff_1", "edu", "ht")
-_mapped_health_trans = productmap(
-    func=_health_trans,
+_mapped_health_transition = productmap(
+    func=_health_transition,
     variables=_health_trans_variables,
     batch_sizes=dict.fromkeys(_health_trans_variables, 0),
 )
 
-tr2yp_grid = jnp.zeros((38, 2, 40, 40, 2, 2, 2))
-_j = jnp.floor_divide(jnp.arange(38), 5)
-tr2yp_grid = tr2yp_grid.at[:, :, :, :, :, :, 1].set(
-    _mapped_health_trans(
-        period=_j,
+health_transition_probs = jnp.zeros((38, 2, 40, 40, 2, 2, 2))
+_age_groups = jnp.floor_divide(jnp.arange(38), 5)
+health_transition_probs = health_transition_probs.at[:, :, :, :, :, :, 1].set(
+    _mapped_health_transition(
+        period=_age_groups,
         health=jnp.arange(2),
         eff=jnp.arange(40),
         eff_1=jnp.arange(40),
@@ -148,116 +147,143 @@ tr2yp_grid = tr2yp_grid.at[:, :, :, :, :, :, 1].set(
         ht=jnp.arange(2),
     )
 )
-tr2yp_grid = tr2yp_grid.at[:, :, :, :, :, :, 0].set(
-    1.0 - tr2yp_grid[:, :, :, :, :, :, 1]
+health_transition_probs = health_transition_probs.at[:, :, :, :, :, :, 0].set(
+    1.0 - health_transition_probs[:, :, :, :, :, :, 1]
 )
 
 
-# --------------------------------------------------------------------------------------
-# Utility function
-# --------------------------------------------------------------------------------------
+def _load_survival_probs():
+    """Load survival probabilities as array (period x education x health)."""
+    surv_low_edu = np.loadtxt(_DATA_DIR / "surv_HS.txt")
+    surv_high_edu = np.loadtxt(_DATA_DIR / "surv_CL.txt")
+    probs = jnp.zeros((38, 2, 2))
+    probs = probs.at[:, 0, 0].set(surv_low_edu[:, 1])  # low edu, bad health
+    probs = probs.at[:, 1, 0].set(surv_high_edu[:, 1])  # high edu, bad health
+    probs = probs.at[:, 0, 1].set(surv_low_edu[:, 0])  # low edu, good health
+    probs = probs.at[:, 1, 1].set(surv_high_edu[:, 0])  # high edu, good health
+    return probs.at[-1].set(0.0)  # certain death at terminal period
+
+
+survival_probs = _load_survival_probs()
+
+
 def utility(
-    scaled_adjustment_cost: FloatND,
-    fcost: FloatND,
-    disutil: FloatND,
-    cons_util: FloatND,
+    adjustment_cost_penalty: FloatND,
+    effort_cost: FloatND,
+    work_disutility: FloatND,
+    consumption_utility: FloatND,
 ) -> FloatND:
-    return cons_util - disutil - fcost - scaled_adjustment_cost
+    return consumption_utility - work_disutility - effort_cost - adjustment_cost_penalty
 
 
-def disutil(
-    working: DiscreteAction,
+def work_disutility(
+    labor_supply: DiscreteAction,
     health: DiscreteState,
     education: DiscreteState,
     period: Period,
-    phigrid: FloatND,
+    work_disutility_grid: FloatND,
 ) -> FloatND:
-    return phigrid[period, education, health] * ((working / 2) ** (2)) / 2
+    return (
+        work_disutility_grid[period, education, health]
+        * ((labor_supply / 2) ** (2))
+        / 2
+    )
 
 
-def scaled_adjustment_cost(
+def adjustment_cost_penalty(
     period: Period,
     adjustment_cost: ContinuousState,
     effort: DiscreteAction,
-    effort_t_1: DiscreteState,
-    chimaxgrid: FloatND,
+    lagged_effort: DiscreteState,
+    adjustment_cost_envelope: FloatND,
 ) -> FloatND:
     return jnp.where(
-        jnp.logical_not(effort == effort_t_1),
-        adjustment_cost * chimaxgrid[period],
+        jnp.logical_not(effort == lagged_effort),
+        adjustment_cost * adjustment_cost_envelope[period],
         0,
     )
 
 
-def cnow(
+def consumption(
     net_income: FloatND, wealth: ContinuousState, saving: ContinuousAction
 ) -> FloatND:
-    wealth = calc_savingsgrid(wealth)
-    saving = calc_savingsgrid(saving)
-    return jnp.maximum(net_income + (wealth) * r - (saving), mincon)
+    wealth = wealth_to_level(wealth)
+    saving = wealth_to_level(saving)
+    return jnp.maximum(
+        net_income + wealth * gross_interest_rate - saving, min_consumption
+    )
 
 
-def cons_util(
-    health: DiscreteState, cnow: FloatND, kappa: float, sigma: float, bb: float
+def consumption_utility(
+    health: DiscreteState,
+    consumption: FloatND,
+    health_consumption_penalty: float,
+    sigma: float,
+    utility_constant: float,
 ) -> FloatND:
-    mucon = jnp.where(health, 1, kappa)
-    return mucon * (((cnow) ** (1.0 - sigma)) / (1.0 - sigma)) + mucon * bb
+    mucon = jnp.where(health, 1, health_consumption_penalty)
+    return (
+        mucon * (consumption ** (1.0 - sigma) / (1.0 - sigma))
+        + mucon * utility_constant
+    )
 
 
-def fcost(
+def effort_cost(
     period: Period,
     education: DiscreteState,
     health: DiscreteState,
     effort: DiscreteAction,
-    psi: float,
-    xigrid: FloatND,
+    effort_elasticity: float,
+    effort_cost_grid: FloatND,
 ) -> FloatND:
     return (
-        xigrid[period, education, health]
-        * (eff_grid[effort] ** (1 + (1 / psi)))
-        / (1 + (1 / psi))
+        effort_cost_grid[period, education, health]
+        * (effort_grid[effort] ** (1 + (1 / effort_elasticity)))
+        / (1 + (1 / effort_elasticity))
     )
 
 
-# --------------------------------------------------------------------------------------
-# Income Calculation
-# --------------------------------------------------------------------------------------
 def net_income(benefits: FloatND, taxed_income: FloatND, pension: FloatND) -> FloatND:
-
     return taxed_income + pension + benefits
 
 
 def scaled_productivity_shock(
-    productivity_shock: ContinuousState, sigx: float
+    productivity_shock: ContinuousState, productivity_shock_scale: float
 ) -> FloatND:
-    return productivity_shock * sigx
+    return productivity_shock * productivity_shock_scale
 
 
 def income(
-    working: DiscreteAction,
+    labor_supply: DiscreteAction,
     period: Period,
     health: DiscreteState,
     education: DiscreteState,
     productivity: DiscreteState,
     scaled_productivity_shock: FloatND,
-    income_grid: FloatND,
+    base_income_grid: FloatND,
 ) -> FloatND:
     return (
-        income_grid[period, health, education]
-        * (working / 2)
-        * theta_val[productivity]
+        base_income_grid[period, health, education]
+        * (labor_supply / 2)
+        * productivity_type_multiplier[productivity]
         * jnp.exp(scaled_productivity_shock)
     )
 
 
 def taxed_income(income: FloatND) -> FloatND:
-    return lamda * (income ** (1.0 - taul)) * (avrgearn**taul)
+    return (
+        tax_scale * (income ** (1.0 - labor_tax_rate)) * (avg_earnings**labor_tax_rate)
+    )
 
 
-def benefits(period: Period, health: DiscreteState, working: DiscreteAction) -> FloatND:
-    eligible = jnp.logical_and(health == 0, working == 0)
+def benefits(
+    period: Period, health: DiscreteState, labor_supply: DiscreteAction
+) -> FloatND:
+    eligible = jnp.logical_and(health == 0, labor_supply == 0)
     return jnp.where(
-        jnp.logical_and(eligible, period <= retirement_age), tt0 * avrgearn, 0
+        jnp.logical_and(eligible, period <= retirement_period),
+        benefit_rate * avg_earnings,
+        0,
     )
 
 
@@ -265,19 +291,18 @@ def pension(
     period: Period,
     education: DiscreteState,
     productivity: DiscreteState,
-    income_grid: FloatND,
-    penre: float,
+    base_income_grid: FloatND,
+    pension_replacement_rate: float,
 ) -> FloatND:
     return jnp.where(
-        period > retirement_age,
-        income_grid[19, 1, education] * theta_val[productivity] * penre,
+        period > retirement_period,
+        base_income_grid[19, 1, education]
+        * productivity_type_multiplier[productivity]
+        * pension_replacement_rate,
         0,
     )
 
 
-# --------------------------------------------------------------------------------------
-# State transitions
-# --------------------------------------------------------------------------------------
 def next_wealth(saving: ContinuousAction) -> ContinuousState:
     return saving
 
@@ -286,57 +311,43 @@ def next_health(
     period: Period,
     health: DiscreteState,
     effort: DiscreteAction,
-    effort_t_1: DiscreteState,
+    lagged_effort: DiscreteState,
     education: DiscreteState,
     health_type: DiscreteState,
-    probs_array: FloatND,
+    transition_probs: FloatND,
 ) -> FloatND:
-    return probs_array[period, health, effort, effort_t_1, education, health_type]
+    return transition_probs[
+        period, health, effort, lagged_effort, education, health_type
+    ]
 
 
-def next_effort_t_1(effort: DiscreteAction) -> DiscreteState:
+def next_lagged_effort(effort: DiscreteAction) -> DiscreteState:
     return effort
-
-
-# --------------------------------------------------------------------------------------
-# Regime Transitions
-# --------------------------------------------------------------------------------------
-
-surv_HS = jnp.array(np.loadtxt(_DATA_DIR / "surv_HS.txt"))
-surv_CL = jnp.array(np.loadtxt(_DATA_DIR / "surv_CL.txt"))
-spgrid = jnp.zeros((38, 2, 2))
-spgrid = spgrid.at[:, 0, 0].set(surv_HS[:, 1])
-spgrid = spgrid.at[:, 1, 0].set(surv_CL[:, 1])
-spgrid = spgrid.at[:, 0, 1].set(surv_HS[:, 0])
-spgrid = spgrid.at[:, 1, 1].set(surv_CL[:, 0])
-# Certain death at the terminal period (age 101 is inactive for alive)
-spgrid = spgrid.at[-1].set(0.0)
 
 
 def next_regime(
     period: Period,
     education: DiscreteState,
     health: DiscreteState,
-    probs_array: FloatND,
+    transition_probs: FloatND,
 ) -> FloatND:
     """Return probability array [P(alive), P(dead)] indexed by RegimeId."""
-    survival_prob = probs_array[period, education, health]
+    survival_prob = transition_probs[period, education, health]
     return jnp.array([survival_prob, 1 - survival_prob])
 
 
-# --------------------------------------------------------------------------------------
-# Constraints
-# --------------------------------------------------------------------------------------
-def retirement_constraint(period: Period, working: DiscreteAction) -> BoolND:
-    return jnp.logical_not(jnp.logical_and(period > retirement_age, working > 0))
+def retirement_constraint(period: Period, labor_supply: DiscreteAction) -> BoolND:
+    return jnp.logical_not(
+        jnp.logical_and(period > retirement_period, labor_supply > 0)
+    )
 
 
 def savings_constraint(
     net_income: FloatND, wealth: ContinuousState, saving: ContinuousAction
 ) -> BoolND:
-    wealth = calc_savingsgrid(wealth)
-    saving = calc_savingsgrid(saving)
-    return net_income + (wealth) * r >= (saving)
+    wealth = wealth_to_level(wealth)
+    saving = wealth_to_level(saving)
+    return net_income + wealth * gross_interest_rate >= saving
 
 
 def alive_is_active(age: int, final_age_alive: float) -> bool:
@@ -347,11 +358,6 @@ def dead_is_active(age: int, initial_age: float) -> bool:
     return age > initial_age
 
 
-# ======================================================================================
-# Model specification and parameters
-# ======================================================================================
-
-
 ALIVE_REGIME = Regime(
     transition=MarkovTransition(next_regime),
     active=partial(alive_is_active, final_age_alive=ages.values[-2]),
@@ -359,34 +365,34 @@ ALIVE_REGIME = Regime(
         "wealth": LinSpacedGrid(start=0, stop=49, n_points=50),
         "health": DiscreteGrid(Health),
         "productivity_shock": prod_shock_grid,
-        "effort_t_1": DiscreteGrid(Effort),
+        "lagged_effort": DiscreteGrid(Effort),
         "adjustment_cost": lcm.shocks.iid.Uniform(n_points=5, start=0, stop=1),
-        "education": DiscreteGrid(EducationStatus),
+        "education": DiscreteGrid(Education),
         "productivity": DiscreteGrid(ProductivityType),
         "health_type": DiscreteGrid(HealthType),
     },
     state_transitions={
         "wealth": next_wealth,
         "health": MarkovTransition(next_health),
-        "effort_t_1": next_effort_t_1,
+        "lagged_effort": next_lagged_effort,
         "education": None,
         "productivity": None,
         "health_type": None,
     },
     actions={
-        "working": DiscreteGrid(WorkingStatus),
+        "labor_supply": DiscreteGrid(LaborSupply),
         "saving": LinSpacedGrid(start=0, stop=49, n_points=50),
         "effort": DiscreteGrid(Effort),
     },
     functions={
         "utility": utility,
-        "disutil": disutil,
-        "fcost": fcost,
-        "cons_util": cons_util,
-        "cnow": cnow,
+        "work_disutility": work_disutility,
+        "effort_cost": effort_cost,
+        "consumption_utility": consumption_utility,
+        "consumption": consumption,
         "income": income,
         "benefits": benefits,
-        "scaled_adjustment_cost": scaled_adjustment_cost,
+        "adjustment_cost_penalty": adjustment_cost_penalty,
         "net_income": net_income,
         "taxed_income": taxed_income,
         "pension": pension,
@@ -410,25 +416,25 @@ MAHLER_YUM_MODEL = Model(
     regime_id_class=RegimeId,
     fixed_params={
         "alive": {
-            "cons_util": {"sigma": SIGMA},
-            "next_health": {"probs_array": tr2yp_grid},
-            "next_regime": {"probs_array": spgrid},
+            "consumption_utility": {"sigma": risk_aversion},
+            "next_health": {"transition_probs": health_transition_probs},
+            "next_regime": {"transition_probs": survival_probs},
         },
     },
 )
 
 
 START_PARAMS = {
-    # Disutility of work: knot values at periods [1, 8, 13, 20]
-    "nu": pd.DataFrame(
+    # Work disutility knot values at periods [1, 8, 13, 20]
+    "work_disutility": pd.DataFrame(
         {
-            "unhealthy": [
+            "bad": [
                 2.41177758126754,
                 1.8133670880598,
                 1.39103558901915,
                 2.41466980231321,
             ],
-            "healthy": [
+            "good": [
                 2.63390750888379,
                 1.66602983591164,
                 1.27839561280412,
@@ -437,30 +443,29 @@ START_PARAMS = {
         },
         index=[1, 8, 13, 20],
     ),
-    "nu_ad": 0.807247922589072,
-    # Disutility of effort: knot values at periods [1, 12, 20, 31]
-    # MultiIndex columns: (education, health)
-    "xi": pd.DataFrame(
+    "education_disutility_adj": 0.807247922589072,
+    # Effort cost knot values at periods [1, 12, 20, 31]
+    "effort_cost": pd.DataFrame(
         {
-            ("low", "unhealthy"): [
+            ("low", "bad"): [
                 0.628031290227532,
                 1.36593242946612,
                 1.64963812690034,
                 0.734873142494319,
             ],
-            ("low", "healthy"): [
+            ("low", "good"): [
                 0.146075197675677,
                 0.55992411008533,
                 1.04795036000287,
                 1.60294886005945,
             ],
-            ("high", "unhealthy"): [
+            ("high", "bad"): [
                 0.46921037985024,
                 0.996665589702672,
                 1.65388250352532,
                 1.08866246911941,
             ],
-            ("high", "healthy"): [
+            ("high", "good"): [
                 0.091312997289004,
                 0.302477689083851,
                 0.739843441095022,
@@ -469,7 +474,6 @@ START_PARAMS = {
         },
         index=[1, 12, 20, 31],
     ),
-    # Income process by education level
     "income_process": {
         "y1": pd.Series({"low": 0.899399488241831, "high": 1.1654726432446}),
         "yt_s": pd.Series({"low": 0.0615804210614531, "high": 0.0874283672769353}),
@@ -477,13 +481,12 @@ START_PARAMS = {
         "wagep": pd.Series({"low": 0.17769766414897, "high": 0.144836058314823}),
         "sigx": 0.0289408524185787,
     },
-    # Adjustment cost envelope
-    "chi": [0.000120437772838191, 0.14468204213946],
-    # Discount factor heterogeneity
-    "beta": pd.Series({"mean": 0.942749393405227, "std": 0.0283688760224992}),
-    # Scalar parameters
-    "psi": 1.11497911620865,
-    "bb": 11,
-    "conp": 0.871503495423925,
-    "penre": 0.358766004066242,
+    "adjustment_cost": [0.000120437772838191, 0.14468204213946],
+    "discount_factor": pd.Series(
+        {"mean": 0.942749393405227, "std": 0.0283688760224992}
+    ),
+    "effort_elasticity": 1.11497911620865,
+    "utility_constant": 11,
+    "health_consumption_penalty": 0.871503495423925,
+    "pension_replacement_rate": 0.358766004066242,
 }

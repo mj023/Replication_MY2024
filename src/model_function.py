@@ -12,9 +12,13 @@ from scipy.interpolate import interp1d as scipy_interp1d
 from Mahler_Yum_2024 import (
     MAHLER_YUM_MODEL,
     ages,
-    calc_savingsgrid,
+    effort_grid,
+    n_periods,
     prod_shock_grid,
-    rho,
+    productivity_type_multiplier,
+    retirement_period,
+    shock_persistence,
+    wealth_to_level,
 )
 from utils import gini
 
@@ -22,72 +26,60 @@ _DATA_DIR = Path(__file__).parent
 
 model = MAHLER_YUM_MODEL
 
-avrgearn = 57706.57
-theta_val = jnp.array([jnp.exp(-0.2898), jnp.exp(0.2898)])
-n = 38
-retirement_age = 19
-winit = jnp.array([43978, 48201])
-avrgearn = avrgearn / winit[1]
+_wealth_normalization = jnp.array([43978, 48201])
 
 
-def create_phigrid(nu, nu_ad):
+def create_work_disutility_grid(work_disutility, education_disutility_adj):
     """Interpolate work disutility knots to full period grid.
 
     Args:
-        nu: DataFrame with columns "unhealthy", "healthy" and period index.
-        nu_ad: Scalar education adjustment factor.
+        work_disutility: DataFrame with columns "bad", "good" and period index.
+        education_disutility_adj: Scalar education adjustment factor.
 
     """
-    phigrid = jnp.zeros((retirement_age + 1, 2, 2))
-    for j, health in enumerate(["unhealthy", "healthy"]):
+    grid = jnp.zeros((retirement_period + 1, 2, 2))
+    for j, health in enumerate(["bad", "good"]):
         spline = scipy_interp1d(
-            np.asarray(nu.index), np.asarray(nu[health]), kind="cubic"
+            np.asarray(work_disutility.index),
+            np.asarray(work_disutility[health]),
+            kind="cubic",
         )
-        interp_points = jnp.arange(1, retirement_age + 2)
+        interp_points = jnp.arange(1, retirement_period + 2)
         temp_grid = jnp.asarray(spline(interp_points))
-        # education=0 (low): apply nu_ad adjustment
-        phigrid = phigrid.at[:, 0, j].set(temp_grid * jnp.exp(nu_ad))
-        # education=1 (high): no adjustment
-        phigrid = phigrid.at[:, 1, j].set(temp_grid)
-    return phigrid
+        grid = grid.at[:, 0, j].set(temp_grid * jnp.exp(education_disutility_adj))
+        grid = grid.at[:, 1, j].set(temp_grid)
+    return grid
 
 
-def create_xigrid(xi):
-    """Interpolate effort disutility knots to full period grid.
+def create_effort_cost_grid(effort_cost):
+    """Interpolate effort cost knots to full period grid.
 
     Args:
-        xi: DataFrame with MultiIndex columns (education, health) and period index.
+        effort_cost: DataFrame with MultiIndex columns (education, health)
+            and period index.
 
     """
-    xigrid = jnp.zeros((n, 2, 2))
-    edu_labels = ["low", "high"]
-    health_labels = ["unhealthy", "healthy"]
-    for i, edu in enumerate(edu_labels):
-        for j, health in enumerate(health_labels):
-            knots = np.asarray(xi[(edu, health)])
-            spline = scipy_interp1d(np.asarray(xi.index), knots, kind="cubic")
+    grid = jnp.zeros((n_periods, 2, 2))
+    for i, edu in enumerate(["low", "high"]):
+        for j, health in enumerate(["bad", "good"]):
+            knots = np.asarray(effort_cost[(edu, health)])
+            spline = scipy_interp1d(np.asarray(effort_cost.index), knots, kind="cubic")
             interp_points = np.arange(1, 31)
             temp_grid = jnp.asarray(spline(interp_points))
-            xigrid = xigrid.at[0:30, i, j].set(temp_grid)
-            xigrid = xigrid.at[30:n, i, j].set(knots[-1])
-    return xigrid
+            grid = grid.at[0:30, i, j].set(temp_grid)
+            grid = grid.at[30:n_periods, i, j].set(knots[-1])
+    return grid
 
 
-def create_chimaxgrid(chi):
+def create_adjustment_cost_envelope(adjustment_cost):
     t = jnp.arange(38)
-    return jnp.maximum(chi[0] * jnp.exp(chi[1] * t), 0)
+    return jnp.maximum(adjustment_cost[0] * jnp.exp(adjustment_cost[1] * t), 0)
 
 
-def create_income_grid(income_process):
-    """Build base income grid from income process parameters.
-
-    Args:
-        income_process: Dict with "y1", "yt_s", "yt_sq", "wagep" (each a
-            pd.Series indexed by education), and "sigx" (scalar).
-
-    """
+def create_base_income_grid(income_process):
+    """Build base income grid from income process parameters."""
     sigx = income_process["sigx"]
-    sdztemp = ((sigx**2.0) / (1.0 - rho**2.0)) ** 0.5
+    sdztemp = ((sigx**2.0) / (1.0 - shock_persistence**2.0)) ** 0.5
     j = jnp.arange(20)
     health = jnp.arange(2)
     education = jnp.arange(2)
@@ -109,7 +101,7 @@ def create_income_grid(income_process):
             * (1.0 - wagep["low"] * (1 - health)),
         )
         return yt / (
-            jnp.exp(((jnp.log(theta_val[1]) ** 2.0) ** 2.0) / 2.0)
+            jnp.exp(((jnp.log(productivity_type_multiplier[1]) ** 2.0) ** 2.0) / 2.0)
             * jnp.exp(((sdztemp**2.0) ** 2.0) / 2.0)
         )
 
@@ -119,8 +111,6 @@ def create_income_grid(income_process):
     )
     return mapped(_period=j, health=health, education=education)
 
-
-eff_grid = jnp.linspace(0, 1, 40)
 
 # Utility arrays for initial type draws
 _discount = jnp.zeros((16), dtype=jnp.int8)
@@ -149,34 +139,37 @@ _EFFORT_LABELS = {i: f"class{i}" for i in range(40)}
 
 
 def create_inputs(seed, n_simulation_subjects, params):
-    """Build model params and initial conditions from structured parameters.
-
-    Args:
-        seed: Random seed for initial condition draws.
-        n_simulation_subjects: Number of agents.
-        params: Structured parameter dict (without beta).
-
-    """
-    income_grid = create_income_grid(params["income_process"])
-    chimax_grid = create_chimaxgrid(params["chi"])
+    """Build model params and initial conditions from structured parameters."""
+    base_income = create_base_income_grid(params["income_process"])
+    cost_envelope = create_adjustment_cost_envelope(params["adjustment_cost"])
     xvalues = prod_shock_grid.get_gridpoints()
     xtrans = prod_shock_grid.get_transition_probs()
-    xi_grid = create_xigrid(params["xi"])
-    phi_grid = create_phigrid(params["nu"], params["nu_ad"])
+    ec_grid = create_effort_cost_grid(params["effort_cost"])
+    wd_grid = create_work_disutility_grid(
+        params["work_disutility"], params["education_disutility_adj"]
+    )
 
     model_params = {
-        "disutil": {"phigrid": phi_grid},
-        "fcost": {"psi": params["psi"], "xigrid": xi_grid},
-        "cons_util": {"bb": params["bb"], "kappa": params["conp"]},
-        "income": {"income_grid": income_grid},
-        "pension": {"income_grid": income_grid, "penre": params["penre"]},
-        "scaled_adjustment_cost": {"chimaxgrid": chimax_grid},
+        "work_disutility": {"work_disutility_grid": wd_grid},
+        "effort_cost": {
+            "effort_elasticity": params["effort_elasticity"],
+            "effort_cost_grid": ec_grid,
+        },
+        "consumption_utility": {
+            "utility_constant": params["utility_constant"],
+            "health_consumption_penalty": params["health_consumption_penalty"],
+        },
+        "income": {"base_income_grid": base_income},
+        "pension": {
+            "base_income_grid": base_income,
+            "pension_replacement_rate": params["pension_replacement_rate"],
+        },
+        "adjustment_cost_penalty": {"adjustment_cost_envelope": cost_envelope},
         "scaled_productivity_shock": {
-            "sigx": jnp.sqrt(params["income_process"]["sigx"])
+            "productivity_shock_scale": jnp.sqrt(params["income_process"]["sigx"])
         },
     }
 
-    # Draw initial conditions
     n = n_simulation_subjects
     key = random.key(seed)
     types = random.choice(key, jnp.arange(16), (n,), p=_initial_dists)
@@ -188,7 +181,7 @@ def create_inputs(seed, n_simulation_subjects, params):
     initial_education = _ed[types]
     initial_productivity = _prod[types]
     initial_discount = _discount[types]
-    initial_effort = jnp.searchsorted(eff_grid, _init_distr[:, 2][types])
+    initial_effort = jnp.searchsorted(effort_grid, _init_distr[:, 2][types])
     prod_dist = jax.lax.fori_loop(
         0,
         1000000,
@@ -209,7 +202,7 @@ def create_inputs(seed, n_simulation_subjects, params):
                 [_HEALTH_LABELS[int(v)] for v in initial_health],
                 categories=["bad", "good"],
             ),
-            "effort_t_1": pd.Categorical(
+            "lagged_effort": pd.Categorical(
                 [_EFFORT_LABELS[int(v)] for v in initial_effort],
                 categories=[f"class{i}" for i in range(40)],
             ),
@@ -236,13 +229,14 @@ def create_inputs(seed, n_simulation_subjects, params):
 def model_solve_and_simulate(params):
     seed = 32
     n_subjects = 10000
-    params_without_beta = {k: v for k, v in params.items() if k != "beta"}
+    params_without_beta = {k: v for k, v in params.items() if k != "discount_factor"}
     common_params, initial_conditions_df, discount_factor_type = create_inputs(
         seed, n_simulation_subjects=n_subjects, params=params_without_beta
     )
 
-    beta_mean = params["beta"]["mean"]
-    beta_std = params["beta"]["std"]
+    beta = params["discount_factor"]
+    beta_mean = beta["mean"]
+    beta_std = beta["std"]
 
     dfs = []
     for beta_val, type_id in [
@@ -262,7 +256,13 @@ def model_solve_and_simulate(params):
             log_level="off",
         )
         df = result.to_dataframe(
-            additional_targets=["utility", "fcost", "pension", "income", "cnow"],
+            additional_targets=[
+                "utility",
+                "effort_cost",
+                "pension",
+                "income",
+                "consumption",
+            ],
             use_labels=False,
         )
         df["discount_type"] = type_id
@@ -275,10 +275,12 @@ def simulate_moments(params):
     res = model_solve_and_simulate(params)
     res = res[res["regime"] == "alive"].copy()
     moments = np.zeros(64)
-    res["effort"] = np.asarray(eff_grid[res["effort"].to_numpy().astype(int)])
-    res["effort_t_1"] = np.asarray(eff_grid[res["effort_t_1"].to_numpy().astype(int)])
-    res["wealth"] = np.asarray(calc_savingsgrid(res["wealth"].to_numpy()))
-    res["saving"] = np.asarray(calc_savingsgrid(res["saving"].to_numpy()))
+    res["effort"] = np.asarray(effort_grid[res["effort"].to_numpy().astype(int)])
+    res["lagged_effort"] = np.asarray(
+        effort_grid[res["lagged_effort"].to_numpy().astype(int)]
+    )
+    res["wealth"] = np.asarray(wealth_to_level(res["wealth"].to_numpy()))
+    res["saving"] = np.asarray(wealth_to_level(res["saving"].to_numpy()))
     for health in range(2):
         for interval in range(4):
             mask = (
@@ -286,10 +288,10 @@ def simulate_moments(params):
                 & (res["period"] < ((interval + 1) * 5))
                 & (res["health"] == health)
             )
-            working_pct_10years = (res.loc[mask, ["working"]].sum() / 2) / (
+            working_pct = (res.loc[mask, ["labor_supply"]].sum() / 2) / (
                 res.loc[mask, "health"].count()
             )
-            moments[(interval + 4 * (1 - health))] = working_pct_10years.iloc[0]
+            moments[(interval + 4 * (1 - health))] = working_pct.iloc[0]
     for health in range(2):
         for education in range(2):
             for interval in range(6):
@@ -299,70 +301,72 @@ def simulate_moments(params):
                     & (res["health"] == health)
                     & (res["education"] == education)
                 )
-                avg_effort_10years = res.loc[mask, "effort"].sum() / (
+                avg_effort = res.loc[mask, "effort"].sum() / (
                     res.loc[mask, "effort"].count()
                 )
                 moments[(interval + 6 * (1 - health) + education * 6 * 2) + 8] = (
-                    avg_effort_10years
+                    avg_effort
                 )
                 if interval < 4:
-                    avg_income_10years = res.loc[mask, "income"].sum() / (
+                    avg_income = res.loc[mask, "income"].sum() / (
                         res.loc[mask, "income"].count()
                     )
                     moments[(interval + 4 * (1 - health) + education * 4 * 2) + 46] = (
-                        avg_income_10years * winit[1] / 1000
+                        avg_income * _wealth_normalization[1] / 1000
                     )
     for interval in range(6):
         mask = (res["period"] >= (interval * 5)) & (
             res["period"] < ((interval + 1) * 5)
         )
-        median_wealth_10y = res.loc[mask, ["wealth"]].median()
-        moments[interval + 32] = median_wealth_10y.iloc[0]
-    avgemp_HS = (res.loc[(res["education"] == 0), ["working"]].sum() / 2) / (
-        res.loc[(res["education"] == 0), "working"].count()
+        median_wealth = res.loc[mask, ["wealth"]].median()
+        moments[interval + 32] = median_wealth.iloc[0]
+    avgemp_low = (res.loc[(res["education"] == 0), ["labor_supply"]].sum() / 2) / (
+        res.loc[(res["education"] == 0), "labor_supply"].count()
     )
-    avgemp_CL = (res.loc[(res["education"] == 1), ["working"]].sum() / 2) / (
-        res.loc[(res["education"] == 1), "working"].count()
+    avgemp_high = (res.loc[(res["education"] == 1), ["labor_supply"]].sum() / 2) / (
+        res.loc[(res["education"] == 1), "labor_supply"].count()
     )
-    moments[38] = avgemp_CL.iloc[0] / avgemp_HS.iloc[0]
+    moments[38] = avgemp_high.iloc[0] / avgemp_low.iloc[0]
     for interval in range(3):
         mask = (res["period"] >= (interval * 10)) & (
             res["period"] < ((interval + 1) * 10)
         )
         non_adjusters = (
-            res.loc[mask & (res["effort"] == res["effort_t_1"])].count()
+            res.loc[mask & (res["effort"] == res["lagged_effort"])].count()
         ) / (res.loc[mask].count())
         moments[interval + 39] = non_adjusters.iloc[0]
     avg_kappa = (
         (res.loc[(res["health"] == 1)].count())
-        + (res.loc[(res["health"] == 0)].count()) * params["conp"]
+        + (res.loc[(res["health"] == 0)].count()) * params["health_consumption_penalty"]
     ) / (len(res))
-    avg_cons = res["cnow"].mean()
+    avg_cons = res["consumption"].mean()
     avg_utility = res["utility"].mean()
     vsly = avg_utility / avg_kappa.iloc[0] * (avg_cons**-2)
     moments[42] = vsly
     moments[43] = res["effort"].std()
     moments[44] = gini(jnp.asarray(res["wealth"].to_numpy()))
     cons_ratio = (
-        res.loc[(res["health"] == 1), "cnow"].sum()
-        / res.loc[(res["health"] == 1), "cnow"].count()
+        res.loc[(res["health"] == 1), "consumption"].sum()
+        / res.loc[(res["health"] == 1), "consumption"].count()
     ) / (
-        res.loc[(res["health"] == 0), "cnow"].sum()
-        / res.loc[(res["health"] == 0), "cnow"].count()
+        res.loc[(res["health"] == 0), "consumption"].sum()
+        / res.loc[(res["health"] == 0), "consumption"].count()
     )
     moments[45] = cons_ratio
     log_earnings = np.log(
-        res.loc[(res["period"] <= retirement_age) & (res["working"] > 0), "income"]
-        * theta_val[1]
+        res.loc[
+            (res["period"] <= retirement_period) & (res["labor_supply"] > 0), "income"
+        ]
+        * productivity_type_multiplier[1]
     )
     moments[62] = log_earnings.var()
     pension_avg = (
-        res.loc[(res["period"] == retirement_age + 1), "pension"].sum()
-        / res.loc[(res["period"] == retirement_age + 1), "pension"].count()
+        res.loc[(res["period"] == retirement_period + 1), "pension"].sum()
+        / res.loc[(res["period"] == retirement_period + 1), "pension"].count()
     )
     avg_income = (
-        res.loc[(res["period"] < retirement_age + 1), "income"].sum()
-        / res.loc[(res["period"] < retirement_age + 1), "income"].count()
+        res.loc[(res["period"] < retirement_period + 1), "income"].sum()
+        / res.loc[(res["period"] < retirement_period + 1), "income"].count()
     )
     moments[63] = pension_avg / avg_income
     print(moments)
@@ -373,23 +377,25 @@ def simulate_wealth(params):
     res = model_solve_and_simulate(params)
     res = res[res["regime"] == "alive"].copy()
     moments = np.zeros(10)
-    res["effort"] = np.asarray(eff_grid[res["effort"].to_numpy().astype(int)])
-    res["effort_t_1"] = np.asarray(eff_grid[res["effort_t_1"].to_numpy().astype(int)])
-    res["wealth"] = np.asarray(calc_savingsgrid(res["wealth"].to_numpy()))
-    res["saving"] = np.asarray(calc_savingsgrid(res["saving"].to_numpy()))
+    res["effort"] = np.asarray(effort_grid[res["effort"].to_numpy().astype(int)])
+    res["lagged_effort"] = np.asarray(
+        effort_grid[res["lagged_effort"].to_numpy().astype(int)]
+    )
+    res["wealth"] = np.asarray(wealth_to_level(res["wealth"].to_numpy()))
+    res["saving"] = np.asarray(wealth_to_level(res["saving"].to_numpy()))
     for interval in range(1, 6):
-        median_wealth_10y_h = res.loc[
+        median_wealth_h = res.loc[
             (res["period"] >= (interval * 5))
             & (res["period"] < ((interval + 1) * 5))
             & (res["health"] == 1),
             ["wealth"],
         ].median()
-        median_wealth_10y_uh = res.loc[
+        median_wealth_uh = res.loc[
             (res["period"] >= (interval * 5))
             & (res["period"] < ((interval + 1) * 5))
             & (res["health"] == 0),
             ["wealth"],
         ].median()
-        moments[interval - 1] = median_wealth_10y_h.iloc[0]
-        moments[interval - 1 + 5] = median_wealth_10y_uh.iloc[0]
+        moments[interval - 1] = median_wealth_h.iloc[0]
+        moments[interval - 1 + 5] = median_wealth_uh.iloc[0]
     return moments

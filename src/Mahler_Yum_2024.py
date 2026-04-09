@@ -1,5 +1,6 @@
 """Replication of Mahler & Yum (2024): Lifestyle Behaviors and Wealth-Health Gaps."""
 
+import dataclasses
 from dataclasses import make_dataclass
 from functools import partial
 from pathlib import Path
@@ -601,30 +602,45 @@ def create_adjustment_cost_envelope(adjustment_cost):
     return pd.Series(values, index=pd.Index(age_values, name="age"))
 
 
-# Initial type distribution arrays
-_discount = jnp.zeros((16), dtype=jnp.int8)
-_prod = jnp.zeros((16), dtype=jnp.int8)
-_ht = jnp.zeros((16), dtype=jnp.int8)
-_ed = jnp.zeros((16), dtype=jnp.int8)
-for _i in range(1, 3):
-    for _j in range(1, 3):
-        for _k in range(1, 3):
-            _index = (_i - 1) * 2 * 2 + (_j - 1) * 2 + _k - 1
-            _discount = _discount.at[_index].set(_i - 1)
-            _prod = _prod.at[_index].set(_j - 1)
-            _ht = _ht.at[_index].set(1 - (_k - 1))
-            _discount = _discount.at[_index + 8].set(_i - 1)
-            _prod = _prod.at[_index + 8].set(_j - 1)
-            _ht = _ht.at[_index + 8].set(1 - (_k - 1))
-            _ed = _ed.at[_index + 8].set(1)
-_init_distr = jnp.array(np.loadtxt(_DATA_DIR / "init_distr_2b2t2h.txt"))
-_initial_dists = jnp.diff(_init_distr[:, 0], prepend=0)
+_DISCOUNT_LABELS = ["small", "large"]
+_EDUCATION_CATEGORIES = [f.name for f in dataclasses.fields(Education)]
+_PRODUCTIVITY_CATEGORIES = [f.name for f in dataclasses.fields(ProductivityType)]
+_HEALTH_TYPE_CATEGORIES = [f.name for f in dataclasses.fields(HealthType)]
+_HEALTH_CATEGORIES = [f.name for f in dataclasses.fields(Health)]
+_EFFORT_CATEGORIES = [f.name for f in dataclasses.fields(Effort)]
 
-_HEALTH_LABELS = {0: "bad", 1: "good"}
-_EDUCATION_LABELS = {0: "low", 1: "high"}
-_PRODUCTIVITY_LABELS = {0: "low", 1: "high"}
-_HEALTH_TYPE_LABELS = {0: "low", 1: "high"}
-_EFFORT_LABELS = {i: f"level_{i}" for i in range(40)}
+
+def _build_type_distribution():
+    """Build initial type distribution as a DataFrame.
+
+    Each row is one of 16 types (discount x productivity x health_type x education).
+
+    """
+    raw = np.loadtxt(_DATA_DIR / "init_distr_2b2t2h.txt")
+    probabilities = jnp.diff(jnp.array(raw[:, 0]), prepend=0)
+
+    records = []
+    for idx in range(16):
+        edu_code = idx // 8
+        remainder = idx % 8
+        discount_code = remainder // 4
+        prod_code = (remainder % 4) // 2
+        health_type_code = remainder % 2
+        records.append(
+            {
+                "probability": float(probabilities[idx]),
+                "health_threshold": float(raw[idx, 1]),
+                "initial_effort": float(raw[idx, 2]),
+                "discount_type": _DISCOUNT_LABELS[discount_code],
+                "education": _EDUCATION_CATEGORIES[edu_code],
+                "productivity": _PRODUCTIVITY_CATEGORIES[prod_code],
+                "health_type": _HEALTH_TYPE_CATEGORIES[health_type_code],
+            }
+        )
+    return pd.DataFrame(records)
+
+
+_TYPE_DISTRIBUTION = _build_type_distribution()
 
 
 def _compute_income_normalization(sigx):
@@ -713,17 +729,23 @@ def create_inputs(seed, n_simulation_subjects, params):
     }
 
     n = n_simulation_subjects
+    td = _TYPE_DISTRIBUTION
     key = random.key(seed)
-    types = random.choice(key, jnp.arange(16), (n,), p=_initial_dists)
+    type_indices = random.choice(
+        key, jnp.arange(len(td)), (n,), p=jnp.array(td["probability"].values)
+    )
+    type_indices_np = np.asarray(type_indices)
+
     new_keys = random.split(key=key, num=3)
     health_draw = random.uniform(new_keys[0], (n,))
-    health_thresholds = _init_distr[:, 1][types]
-    initial_health = jnp.where(health_draw > health_thresholds, 0, 1)
-    initial_health_type = 1 - _ht[types]
-    initial_education = _ed[types]
-    initial_productivity = _prod[types]
-    initial_discount = _discount[types]
-    initial_effort = jnp.searchsorted(effort_grid, _init_distr[:, 2][types])
+    health_thresholds = td["health_threshold"].values[type_indices_np]
+    initial_health_codes = np.where(health_draw > health_thresholds, 0, 1)
+
+    initial_effort_values = td["initial_effort"].values[type_indices_np]
+    initial_effort_codes = np.searchsorted(
+        np.asarray(effort_grid), initial_effort_values
+    )
+
     prod_dist = jax.lax.fori_loop(
         0,
         1000000,
@@ -741,34 +763,37 @@ def create_inputs(seed, n_simulation_subjects, params):
             "age": ages.values[0],
             "wealth": np.zeros(n),
             "health": pd.Categorical(
-                [_HEALTH_LABELS[int(v)] for v in initial_health],
-                categories=["bad", "good"],
+                [_HEALTH_CATEGORIES[c] for c in initial_health_codes],
+                categories=_HEALTH_CATEGORIES,
             ),
             "lagged_effort": pd.Categorical(
-                [_EFFORT_LABELS[int(v)] for v in initial_effort],
-                categories=[f"level_{i}" for i in range(40)],
+                [_EFFORT_CATEGORIES[c] for c in initial_effort_codes],
+                categories=_EFFORT_CATEGORIES,
             ),
             "education": pd.Categorical(
-                [_EDUCATION_LABELS[int(v)] for v in initial_education],
-                categories=["low", "high"],
+                td["education"].values[type_indices_np],
+                categories=_EDUCATION_CATEGORIES,
             ),
             "productivity": pd.Categorical(
-                [_PRODUCTIVITY_LABELS[int(v)] for v in initial_productivity],
-                categories=["low", "high"],
+                td["productivity"].values[type_indices_np],
+                categories=_PRODUCTIVITY_CATEGORIES,
             ),
             "health_type": pd.Categorical(
-                [_HEALTH_TYPE_LABELS[int(v)] for v in initial_health_type],
-                categories=["low", "high"],
+                td["health_type"].values[type_indices_np],
+                categories=_HEALTH_TYPE_CATEGORIES,
             ),
             "productivity_shock": initial_productivity_shock,
             "adjustment_cost": initial_adjustment_cost,
         }
     )
+    discount_types = np.array(
+        [_DISCOUNT_LABELS.index(d) for d in td["discount_type"].values[type_indices_np]]
+    )
 
     return (
         model_params,
         initial_conditions_df,
-        np.asarray(initial_discount),
+        discount_types,
         discount_factor_small,
         discount_factor_large,
     )

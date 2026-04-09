@@ -9,34 +9,29 @@ from Mahler_Yum_2024 import (
     MAHLER_YUM_MODEL,
     START_PARAMS,
     ages,
+    create_inputs,
     prod_shock_grid,
 )
-from model_function import create_inputs
 
 _REGRESSION_DIR = Path(__file__).parent.parent / "regression_data"
 
 
 def test_model_solves_and_simulates():
     """Smoke test: model runs end-to-end with small n."""
-    params_without_beta = {
-        k: v for k, v in START_PARAMS.items() if k != "discount_factor"
-    }
-    common_params, initial_conditions_df, _discount_type = create_inputs(
-        seed=0, n_simulation_subjects=4, params=params_without_beta
+    common_params, ic_df, _, discount_factor_small, _ = create_inputs(
+        seed=0, n_simulation_subjects=4, params=START_PARAMS
     )
-    beta = START_PARAMS["discount_factor"]
-    assert isinstance(beta, pd.Series)
     initial_conditions = initial_conditions_from_dataframe(
-        df=initial_conditions_df, model=MAHLER_YUM_MODEL
+        df=ic_df, model=MAHLER_YUM_MODEL
     )
     result = MAHLER_YUM_MODEL.simulate(
-        params={"alive": {"discount_factor": beta["mean"], **common_params}},
+        params={"alive": {"discount_factor": discount_factor_small, **common_params}},
         initial_conditions=initial_conditions,
         period_to_regime_to_V_arr=None,
         seed=12345,
         log_level="off",
     )
-    df = result.to_dataframe(use_labels=False)
+    df = result.to_dataframe()
     assert len(df) > 0
     assert "period" in df.columns
     assert "wealth" in df.columns
@@ -61,11 +56,8 @@ def test_period_0_policy_matches_old_pylcm():
     old_prodshock = np.load(_REGRESSION_DIR / "old_initial_prodshock.npy")
     old_adjcost = np.load(_REGRESSION_DIR / "old_initial_adjcost.npy")
 
-    params_without_beta = {
-        k: v for k, v in START_PARAMS.items() if k != "discount_factor"
-    }
-    common_params, new_ic_df, _ = create_inputs(
-        seed=32, n_simulation_subjects=10000, params=params_without_beta
+    common_params, new_ic_df, _, discount_factor_small, discount_factor_large = (
+        create_inputs(seed=32, n_simulation_subjects=10000, params=START_PARAMS)
     )
 
     health_labels = {0: "bad", 1: "good"}
@@ -95,14 +87,12 @@ def test_period_0_policy_matches_old_pylcm():
         }
     )
 
-    beta = START_PARAMS["discount_factor"]
-    assert isinstance(beta, pd.Series)
     discount_factor_type = old_discount
 
     all_labor_supply = []
-    for beta_val, type_id in [
-        (beta["mean"] - beta["std"], 0),
-        (beta["mean"] + beta["std"], 1),
+    for discount_factor, type_id in [
+        (discount_factor_small, 0),
+        (discount_factor_large, 1),
     ]:
         mask = discount_factor_type == type_id
         type_df = old_ic_df.loc[mask].reset_index(drop=True)
@@ -111,7 +101,7 @@ def test_period_0_policy_matches_old_pylcm():
         )
 
         result = MAHLER_YUM_MODEL.simulate(
-            params={"alive": {"discount_factor": beta_val, **common_params}},
+            params={"alive": {"discount_factor": discount_factor, **common_params}},
             initial_conditions=type_initial,
             period_to_regime_to_V_arr=None,
             seed=42,

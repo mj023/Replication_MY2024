@@ -189,13 +189,32 @@ def adjustment_cost_penalty(
     )
 
 
+def wealth_level(wealth: ContinuousState) -> FloatND:
+    """Convert wealth grid index to actual wealth level."""
+    return wealth_to_level(wealth)
+
+
+def saving_level(saving: ContinuousAction) -> FloatND:
+    """Convert saving grid index to actual saving level."""
+    return wealth_to_level(saving)
+
+
+def effort_value(effort: DiscreteAction, effort_grid: FloatND) -> FloatND:
+    """Map effort class index to continuous [0, 1] value."""
+    return effort_grid[effort]
+
+
+def lagged_effort_value(lagged_effort: DiscreteState, effort_grid: FloatND) -> FloatND:
+    """Map lagged effort class index to continuous [0, 1] value."""
+    return effort_grid[lagged_effort]
+
+
 def consumption(
-    net_income: FloatND, wealth: ContinuousState, saving: ContinuousAction
+    net_income: FloatND, wealth_level: FloatND, saving_level: FloatND
 ) -> FloatND:
-    wealth = wealth_to_level(wealth)
-    saving = wealth_to_level(saving)
     return jnp.maximum(
-        net_income + wealth * gross_interest_rate - saving, min_consumption
+        net_income + wealth_level * gross_interest_rate - saving_level,
+        min_consumption,
     )
 
 
@@ -217,14 +236,13 @@ def effort_cost(
     period: Period,
     education: DiscreteState,
     health: DiscreteState,
-    effort: DiscreteAction,
+    effort_value: FloatND,
     effort_elasticity: float,
     effort_cost_grid: FloatND,
-    effort_grid: FloatND,
 ) -> FloatND:
     return (
         effort_cost_grid[period, education, health]
-        * (effort_grid[effort] ** (1 + (1 / effort_elasticity)))
+        * (effort_value ** (1 + (1 / effort_elasticity)))
         / (1 + (1 / effort_elasticity))
     )
 
@@ -314,8 +332,8 @@ def next_wealth(saving: ContinuousAction) -> ContinuousState:
 def next_health(
     period: Period,
     health: DiscreteState,
-    effort: DiscreteAction,
-    lagged_effort: DiscreteState,
+    effort_value: FloatND,
+    lagged_effort_value: FloatND,
     education: DiscreteState,
     health_type: DiscreteState,
     health_intercept: float,
@@ -325,7 +343,6 @@ def next_health(
     college_coefficient: float,
     health_effort_coefficient: float,
     lagged_health_effort_coefficient: float,
-    effort_grid: FloatND,
 ) -> FloatND:
     """Compute health transition probabilities via logit model."""
     y = (
@@ -334,8 +351,8 @@ def next_health(
         + education * college_coefficient
         + health * good_health_coefficient
         + health_type * health_type_coefficient
-        + effort_grid[effort] * health_effort_coefficient
-        + effort_grid[lagged_effort] * lagged_health_effort_coefficient
+        + effort_value * health_effort_coefficient
+        + lagged_effort_value * lagged_health_effort_coefficient
     )
     prob_good = jnp.exp(y) / (1.0 + jnp.exp(y))
     return jnp.array([1.0 - prob_good, prob_good])
@@ -363,11 +380,9 @@ def retirement_constraint(period: Period, labor_supply: DiscreteAction) -> BoolN
 
 
 def savings_constraint(
-    net_income: FloatND, wealth: ContinuousState, saving: ContinuousAction
+    net_income: FloatND, wealth_level: FloatND, saving_level: FloatND
 ) -> BoolND:
-    wealth = wealth_to_level(wealth)
-    saving = wealth_to_level(saving)
-    return net_income + wealth * gross_interest_rate >= saving
+    return net_income + wealth_level * gross_interest_rate >= saving_level
 
 
 def alive_is_active(age: int, final_age_alive: float) -> bool:
@@ -406,6 +421,10 @@ ALIVE_REGIME = Regime(
     },
     functions={
         "utility": utility,
+        "wealth_level": wealth_level,
+        "saving_level": saving_level,
+        "effort_value": effort_value,
+        "lagged_effort_value": lagged_effort_value,
         "work_disutility": work_disutility,
         "effort_cost": effort_cost,
         "consumption_utility": consumption_utility,
@@ -641,7 +660,17 @@ def _compute_pension_base(income_process, income_normalization):
 
 
 def create_inputs(seed, n_simulation_subjects, params):
-    """Build model params and initial conditions from structured parameters."""
+    """Build model params, initial conditions, and discount factors.
+
+    Returns:
+        Tuple of (model_params, initial_conditions_df, discount_types,
+        discount_factor_small, discount_factor_large).
+
+    """
+    discount_factor = params["discount_factor"]
+    discount_factor_small = discount_factor["mean"] - discount_factor["std"]
+    discount_factor_large = discount_factor["mean"] + discount_factor["std"]
+
     cost_envelope = create_adjustment_cost_envelope(params["adjustment_cost"])
     xvalues = prod_shock_grid.get_gridpoints()
     xtrans = prod_shock_grid.get_transition_probs()
@@ -741,4 +770,10 @@ def create_inputs(seed, n_simulation_subjects, params):
         }
     )
 
-    return model_params, initial_conditions_df, np.asarray(initial_discount)
+    return (
+        model_params,
+        initial_conditions_df,
+        np.asarray(initial_discount),
+        discount_factor_small,
+        discount_factor_large,
+    )

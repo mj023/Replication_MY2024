@@ -10,7 +10,6 @@ import jax.numpy as jnp
 import lcm
 import numpy as np
 import pandas as pd
-from jax import random
 from lcm import (
     AgeGrid,
     DiscreteGrid,
@@ -88,6 +87,12 @@ class ProductivityType:
 class HealthType:
     low: int
     high: int
+
+
+@categorical(ordered=True)
+class DiscountType:
+    small: int
+    large: int
 
 
 @categorical(ordered=False)
@@ -602,44 +607,34 @@ def create_adjustment_cost_envelope(adjustment_cost):
     return pd.Series(values, index=pd.Index(age_values, name="age"))
 
 
-_DISCOUNT_LABELS = ("small", "large")
-_EDUCATION_FIELDS = tuple(f.name for f in dataclasses.fields(Education))
-_PRODUCTIVITY_FIELDS = tuple(f.name for f in dataclasses.fields(ProductivityType))
-_HEALTH_TYPE_FIELDS = tuple(f.name for f in dataclasses.fields(HealthType))
 _EFFORT_FIELD_NAMES = np.array([f.name for f in dataclasses.fields(Effort)])
 
 
 def _build_type_distribution():
     """Build initial type distribution as a DataFrame.
 
-    Each row is one of 16 types (discount x productivity x health_type x education).
+    Each row is one of 16 types (education x discount x productivity x health_type).
+    Row ordering matches the file `init_distr_2b2t2h.txt`.
 
     """
     raw = np.loadtxt(_DATA_DIR / "init_distr_2b2t2h.txt")
-    probabilities = jnp.diff(jnp.array(raw[:, 0]), prepend=0)
-
-    records = []
-    for idx in range(16):
-        edu_code = idx // 8
-        remainder = idx % 8
-        discount_code = remainder // 4
-        prod_code = (remainder % 4) // 2
-        health_type_code = remainder % 2
-        records.append(
-            {
-                "probability": float(probabilities[idx]),
-                "health_threshold": float(raw[idx, 1]),
-                "initial_effort": float(raw[idx, 2]),
-                "discount_type": _DISCOUNT_LABELS[discount_code],
-                "education": _EDUCATION_FIELDS[edu_code],
-                "productivity": _PRODUCTIVITY_FIELDS[prod_code],
-                "health_type": _HEALTH_TYPE_FIELDS[health_type_code],
-            }
-        )
-    return pd.DataFrame(records)
-
-
-_TYPE_DISTRIBUTION = _build_type_distribution()
+    index = pd.MultiIndex.from_product(
+        [
+            [f.name for f in dataclasses.fields(Education)],
+            [f.name for f in dataclasses.fields(DiscountType)],
+            [f.name for f in dataclasses.fields(ProductivityType)],
+            [f.name for f in dataclasses.fields(HealthType)],
+        ],
+        names=["education", "discount_type", "productivity", "health_type"],
+    )
+    return pd.DataFrame(
+        {
+            "probability": np.asarray(jnp.diff(jnp.array(raw[:, 0]), prepend=0)),
+            "health_threshold": raw[:, 1],
+            "initial_effort": raw[:, 2],
+        },
+        index=index,
+    ).reset_index()
 
 
 def _compute_income_normalization(sigx):
@@ -727,10 +722,10 @@ def create_inputs(seed, n_simulation_subjects, params):
         },
     }
 
-    td = _TYPE_DISTRIBUTION
-    key = random.key(seed)
+    td = _build_type_distribution()
+    key = jax.random.key(seed)
     type_indices = np.asarray(
-        random.choice(
+        jax.random.choice(
             key,
             jnp.arange(len(td)),
             (n_simulation_subjects,),
@@ -738,8 +733,8 @@ def create_inputs(seed, n_simulation_subjects, params):
         )
     )
 
-    keys = random.split(key=key, num=3)
-    health_draw = random.uniform(keys[0], (n_simulation_subjects,))
+    keys = jax.random.split(key=key, num=3)
+    health_draw = jax.random.uniform(keys[0], (n_simulation_subjects,))
     health_thresholds = td["health_threshold"].values[type_indices]
 
     effort_codes = np.searchsorted(
@@ -766,7 +761,7 @@ def create_inputs(seed, n_simulation_subjects, params):
             "health_type": td["health_type"].values[type_indices],
             "productivity_shock": np.asarray(
                 shock_gridpoints[
-                    random.choice(
+                    jax.random.choice(
                         keys[2],
                         jnp.arange(5),
                         (n_simulation_subjects,),
@@ -775,13 +770,11 @@ def create_inputs(seed, n_simulation_subjects, params):
                 ]
             ),
             "adjustment_cost": np.asarray(
-                random.uniform(keys[1], (n_simulation_subjects,))
+                jax.random.uniform(keys[1], (n_simulation_subjects,))
             ),
         }
     )
-    discount_types = np.array(
-        [_DISCOUNT_LABELS.index(d) for d in td["discount_type"].values[type_indices]]
-    )
+    discount_types = (td["discount_type"].values[type_indices] == "large").astype(int)
 
     return (
         model_params,

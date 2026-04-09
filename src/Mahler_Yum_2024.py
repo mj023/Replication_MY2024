@@ -603,11 +603,11 @@ def create_adjustment_cost_envelope(adjustment_cost):
 
 
 _DISCOUNT_LABELS = ["small", "large"]
-_EDUCATION_CATEGORIES = [f.name for f in dataclasses.fields(Education)]
-_PRODUCTIVITY_CATEGORIES = [f.name for f in dataclasses.fields(ProductivityType)]
-_HEALTH_TYPE_CATEGORIES = [f.name for f in dataclasses.fields(HealthType)]
-_HEALTH_CATEGORIES = [f.name for f in dataclasses.fields(Health)]
-_EFFORT_CATEGORIES = [f.name for f in dataclasses.fields(Effort)]
+
+
+def _field_name(categorical_class, code):
+    """Get the field name for an integer code from a @categorical class."""
+    return dataclasses.fields(categorical_class)[code].name
 
 
 def _build_type_distribution():
@@ -632,9 +632,9 @@ def _build_type_distribution():
                 "health_threshold": float(raw[idx, 1]),
                 "initial_effort": float(raw[idx, 2]),
                 "discount_type": _DISCOUNT_LABELS[discount_code],
-                "education": _EDUCATION_CATEGORIES[edu_code],
-                "productivity": _PRODUCTIVITY_CATEGORIES[prod_code],
-                "health_type": _HEALTH_TYPE_CATEGORIES[health_type_code],
+                "education": _field_name(Education, edu_code),
+                "productivity": _field_name(ProductivityType, prod_code),
+                "health_type": _field_name(HealthType, health_type_code),
             }
         )
     return pd.DataFrame(records)
@@ -682,24 +682,18 @@ def create_inputs(seed, n_simulation_subjects, params):
     discount_factor_small = discount_factor["mean"] - discount_factor["std"]
     discount_factor_large = discount_factor["mean"] + discount_factor["std"]
 
-    cost_envelope = create_adjustment_cost_envelope(params["adjustment_cost"])
-    xvalues = prod_shock_grid.get_gridpoints()
-    xtrans = prod_shock_grid.get_transition_probs()
-    ec_grid = create_effort_cost_grid(params["effort_cost"])
-    wd_grid = create_work_disutility_grid(
-        params["work_disutility"], params["education_disutility_adjustment"]
-    )
-
     income_process = params["income_process"]
-    sigx = income_process["sigx"]
-    income_norm = _compute_income_normalization(sigx)
-    pension_base = _compute_pension_base(income_process, income_norm)
+    income_norm = _compute_income_normalization(income_process["sigx"])
 
     model_params = {
-        "work_disutility": {"work_disutility_grid": wd_grid},
+        "work_disutility": {
+            "work_disutility_grid": create_work_disutility_grid(
+                params["work_disutility"], params["education_disutility_adjustment"]
+            ),
+        },
         "effort_cost": {
             "effort_elasticity": params["effort_elasticity"],
-            "effort_cost_grid": ec_grid,
+            "effort_cost_grid": create_effort_cost_grid(params["effort_cost"]),
         },
         "consumption_utility": {
             "utility_constant": params["utility_constant"],
@@ -721,73 +715,85 @@ def create_inputs(seed, n_simulation_subjects, params):
             "income_normalization": income_norm,
         },
         "pension": {
-            "pension_base": pension_base,
+            "pension_base": _compute_pension_base(income_process, income_norm),
             "pension_replacement_rate": params["pension_replacement_rate"],
         },
-        "adjustment_cost_penalty": {"adjustment_cost_envelope": cost_envelope},
-        "scaled_productivity_shock": {"productivity_shock_scale": jnp.sqrt(sigx)},
+        "adjustment_cost_penalty": {
+            "adjustment_cost_envelope": create_adjustment_cost_envelope(
+                params["adjustment_cost"]
+            ),
+        },
+        "scaled_productivity_shock": {
+            "productivity_shock_scale": jnp.sqrt(income_process["sigx"]),
+        },
     }
 
-    n = n_simulation_subjects
     td = _TYPE_DISTRIBUTION
     key = random.key(seed)
-    type_indices = random.choice(
-        key, jnp.arange(len(td)), (n,), p=jnp.array(td["probability"].values)
+    type_indices = np.asarray(
+        random.choice(
+            key,
+            jnp.arange(len(td)),
+            (n_simulation_subjects,),
+            p=jnp.array(td["probability"].values),
+        )
     )
-    type_indices_np = np.asarray(type_indices)
 
-    new_keys = random.split(key=key, num=3)
-    health_draw = random.uniform(new_keys[0], (n,))
-    health_thresholds = td["health_threshold"].values[type_indices_np]
+    keys = random.split(key=key, num=3)
+    health_draw = random.uniform(keys[0], (n_simulation_subjects,))
+    health_thresholds = td["health_threshold"].values[type_indices]
     initial_health_codes = np.where(health_draw > health_thresholds, 0, 1)
 
-    initial_effort_values = td["initial_effort"].values[type_indices_np]
+    initial_effort_values = td["initial_effort"].values[type_indices]
     initial_effort_codes = np.searchsorted(
         np.asarray(effort_grid), initial_effort_values
     )
 
-    prod_dist = jax.lax.fori_loop(
+    shock_gridpoints = prod_shock_grid.get_gridpoints()
+    stationary_shock_dist = jax.lax.fori_loop(
         0,
         1000000,
-        lambda _i, a: a @ xtrans.T,
+        lambda _i, a: a @ prod_shock_grid.get_transition_probs().T,
         jnp.full(5, 1 / 5),
-    )
-    initial_adjustment_cost = np.asarray(random.uniform(new_keys[1], (n,)))
-    initial_productivity_shock = np.asarray(
-        xvalues[random.choice(new_keys[2], jnp.arange(5), (n,), p=prod_dist)]
     )
 
     initial_conditions_df = pd.DataFrame(
         {
             "regime": "alive",
             "age": ages.values[0],
-            "wealth": np.zeros(n),
+            "wealth": np.zeros(n_simulation_subjects),
             "health": pd.Categorical(
-                [_HEALTH_CATEGORIES[c] for c in initial_health_codes],
-                categories=_HEALTH_CATEGORIES,
-            ),
+                [_field_name(Health, c) for c in initial_health_codes],
+            ).astype(Health.to_categorical_dtype()),  # ty: ignore[unresolved-attribute],
             "lagged_effort": pd.Categorical(
-                [_EFFORT_CATEGORIES[c] for c in initial_effort_codes],
-                categories=_EFFORT_CATEGORIES,
-            ),
+                [_field_name(Effort, c) for c in initial_effort_codes],
+            ).astype(Effort.to_categorical_dtype()),  # ty: ignore[unresolved-attribute],
             "education": pd.Categorical(
-                td["education"].values[type_indices_np],
-                categories=_EDUCATION_CATEGORIES,
-            ),
+                td["education"].values[type_indices],
+            ).astype(Education.to_categorical_dtype()),  # ty: ignore[unresolved-attribute],
             "productivity": pd.Categorical(
-                td["productivity"].values[type_indices_np],
-                categories=_PRODUCTIVITY_CATEGORIES,
-            ),
+                td["productivity"].values[type_indices],
+            ).astype(ProductivityType.to_categorical_dtype()),  # ty: ignore[unresolved-attribute],
             "health_type": pd.Categorical(
-                td["health_type"].values[type_indices_np],
-                categories=_HEALTH_TYPE_CATEGORIES,
+                td["health_type"].values[type_indices],
+            ).astype(HealthType.to_categorical_dtype()),  # ty: ignore[unresolved-attribute],
+            "productivity_shock": np.asarray(
+                shock_gridpoints[
+                    random.choice(
+                        keys[2],
+                        jnp.arange(5),
+                        (n_simulation_subjects,),
+                        p=stationary_shock_dist,
+                    )
+                ]
             ),
-            "productivity_shock": initial_productivity_shock,
-            "adjustment_cost": initial_adjustment_cost,
+            "adjustment_cost": np.asarray(
+                random.uniform(keys[1], (n_simulation_subjects,))
+            ),
         }
     )
     discount_types = np.array(
-        [_DISCOUNT_LABELS.index(d) for d in td["discount_type"].values[type_indices_np]]
+        [_DISCOUNT_LABELS.index(d) for d in td["discount_type"].values[type_indices]]
     )
 
     return (

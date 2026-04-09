@@ -82,14 +82,14 @@ upper_bounds = {
 
 
 def criterion_func(params):
-    sim_moments = simulate_moments(params)
+    sim_moments = simulate_moments(params=params)
     e = (sim_moments - empirical_moments).values
     return e.T @ W_var @ e
 
 
 @om.mark.least_squares
 def criterion_func_sqr(params):
-    sim_moments = simulate_moments(params)
+    sim_moments = simulate_moments(params=params)
     e = (sim_moments - empirical_moments).values
     return e @ W_root
 
@@ -109,9 +109,9 @@ res = om.minimize(
 )
 res.to_pickle("pd_full_model_run_1.pkl")
 optim_time = time.time() - start_time
-simulate_moments(start_params)
+simulate_moments(params=start_params)
 start_time = time.time()
-simulate_moments(start_params)
+simulate_moments(params=start_params)
 one_iter = time.time() - start_time
 timings = {"full_opt": [optim_time], "one_iter": one_iter}
 time_df = pd.DataFrame(timings)

@@ -47,7 +47,7 @@ def test_period_0_policy_matches_old_pylcm():
     """Regression test: period-0 policy matches pylcm 167a3a6 output.
 
     Uses initial conditions from the old code (pylcm commit 167a3a6) to ensure
-    that the ported model produces identical period-0 actions. Period 0 is
+    that the ported model produces identical period-0 labor supply choices. Period 0 is
     deterministic (no stochastic transitions yet), so any difference indicates
     a genuine policy difference rather than random seed noise.
     """

@@ -534,7 +534,7 @@ START_PARAMS = {
 # ---------------------------------------------------------------------------
 
 
-def _age_keys_to_periods(age_keyed_dict):
+def _age_keys_to_periods(*, age_keyed_dict):
     """Convert {"27": val, "41": val, ...} to period-indexed arrays."""
     start_age = int(ages.values[0])
     step = int(ages.values[1] - ages.values[0])
@@ -544,7 +544,7 @@ def _age_keys_to_periods(age_keyed_dict):
     return knot_periods, values
 
 
-def _interpolate_knots(age_keyed_dict, period_range, flat_after=None):
+def _interpolate_knots(*, age_keyed_dict, period_range, flat_after=None):
     """Cubic spline interpolation of age-keyed knots over a period range.
 
     Args:
@@ -553,7 +553,7 @@ def _interpolate_knots(age_keyed_dict, period_range, flat_after=None):
         flat_after: If set, extend the last knot value for periods beyond this.
 
     """
-    knot_periods, knot_values = _age_keys_to_periods(age_keyed_dict)
+    knot_periods, knot_values = _age_keys_to_periods(age_keyed_dict=age_keyed_dict)
     spline = scipy_interp1d(knot_periods, knot_values, kind="cubic")
     values = np.asarray(spline(period_range))
     if flat_after is not None:
@@ -561,13 +561,15 @@ def _interpolate_knots(age_keyed_dict, period_range, flat_after=None):
     return values
 
 
-def create_work_disutility_grid(work_disutility, education_disutility_adjustment):
+def create_work_disutility_grid(*, work_disutility, education_disutility_adjustment):
     """Interpolate work disutility knots to a labeled Series."""
     age_values = np.asarray(ages.values)
     period_range = np.arange(1, retirement_period + 1)
     records = []
     for health in ["bad", "good"]:
-        values = _interpolate_knots(work_disutility[health], period_range)
+        values = _interpolate_knots(
+            age_keyed_dict=work_disutility[health], period_range=period_range
+        )
         for period_idx, age in enumerate(age_values):
             for edu in ["low", "high"]:
                 if period_idx < retirement_period:
@@ -582,15 +584,19 @@ def create_work_disutility_grid(work_disutility, education_disutility_adjustment
     return df.set_index(["age", "education", "health"])["value"]
 
 
-def create_effort_cost_grid(effort_cost):
+def create_effort_cost_grid(*, effort_cost):
     """Interpolate effort cost knots to a labeled Series (age x education x health)."""
     age_values = np.asarray(ages.values)
     period_range = np.arange(1, 31)
     records = []
     for edu in ["low", "high"]:
         for health in ["bad", "good"]:
-            values = _interpolate_knots(effort_cost[edu][health], period_range)
-            last_knot = _age_keys_to_periods(effort_cost[edu][health])[1][-1]
+            values = _interpolate_knots(
+                age_keyed_dict=effort_cost[edu][health], period_range=period_range
+            )
+            last_knot = _age_keys_to_periods(age_keyed_dict=effort_cost[edu][health])[
+                1
+            ][-1]
             for period_idx, age in enumerate(age_values):
                 if period_idx < len(period_range):
                     val = values[period_idx]
@@ -601,7 +607,7 @@ def create_effort_cost_grid(effort_cost):
     return df.set_index(["age", "education", "health"])["value"]
 
 
-def create_adjustment_cost_envelope(adjustment_cost):
+def create_adjustment_cost_envelope(*, adjustment_cost):
     """Build exponential adjustment cost envelope as a labeled Series (age)."""
     age_values = np.asarray(ages.values)
     t = np.arange(n_periods)
@@ -639,7 +645,7 @@ def _build_type_distribution():
     ).reset_index()
 
 
-def _compute_income_normalization(sigx):
+def _compute_income_normalization(*, sigx):
     """Compute the income normalization denominator from shock variance."""
     sdztemp = ((sigx**2.0) / (1.0 - shock_persistence**2.0)) ** 0.5
     return jnp.exp(
@@ -647,7 +653,7 @@ def _compute_income_normalization(sigx):
     ) * jnp.exp(((sdztemp**2.0) ** 2.0) / 2.0)
 
 
-def _compute_pension_base(income_process, income_normalization):
+def _compute_pension_base(*, income_process, income_normalization):
     """Compute base income at retirement age in good health, by education."""
     y1 = income_process["y1"]
     yt_s = income_process["yt_s"]
@@ -666,7 +672,7 @@ def _compute_pension_base(income_process, income_normalization):
     return pension_base
 
 
-def create_inputs(seed, n_simulation_subjects, params):
+def create_inputs(*, seed, n_simulation_subjects, params):
     """Build model params, initial conditions, and discount factors.
 
     Returns:
@@ -679,17 +685,22 @@ def create_inputs(seed, n_simulation_subjects, params):
     discount_factor_large = discount_factor["mean"] + discount_factor["std"]
 
     income_process = params["income_process"]
-    income_norm = _compute_income_normalization(income_process["sigx"])
+    income_norm = _compute_income_normalization(sigx=income_process["sigx"])
 
     model_params = {
         "work_disutility": {
             "work_disutility_grid": create_work_disutility_grid(
-                params["work_disutility"], params["education_disutility_adjustment"]
+                work_disutility=params["work_disutility"],
+                education_disutility_adjustment=params[
+                    "education_disutility_adjustment"
+                ],
             ),
         },
         "effort_cost": {
             "effort_elasticity": params["effort_elasticity"],
-            "effort_cost_grid": create_effort_cost_grid(params["effort_cost"]),
+            "effort_cost_grid": create_effort_cost_grid(
+                effort_cost=params["effort_cost"]
+            ),
         },
         "consumption_utility": {
             "utility_constant": params["utility_constant"],
@@ -711,12 +722,15 @@ def create_inputs(seed, n_simulation_subjects, params):
             "income_normalization": income_norm,
         },
         "pension": {
-            "pension_base": _compute_pension_base(income_process, income_norm),
+            "pension_base": _compute_pension_base(
+                income_process=income_process,
+                income_normalization=income_norm,
+            ),
             "pension_replacement_rate": params["pension_replacement_rate"],
         },
         "adjustment_cost_penalty": {
             "adjustment_cost_envelope": create_adjustment_cost_envelope(
-                params["adjustment_cost"]
+                adjustment_cost=params["adjustment_cost"],
             ),
         },
         "scaled_productivity_shock": {
@@ -798,7 +812,7 @@ _ADDITIONAL_TARGETS = [
 ]
 
 
-def model_solve_and_simulate(params):
+def model_solve_and_simulate(*, params):
     """Solve and simulate for both discount factor types."""
     (
         common_params,

@@ -1,6 +1,7 @@
 """Moment specification and computation for MSM estimation."""
 
 import dataclasses
+import logging
 
 import jax.numpy as jnp
 import numpy as np
@@ -15,9 +16,14 @@ from Mahler_Yum_2024 import (
 )
 from utils import gini
 
+_log = logging.getLogger("lcm")
+
 _productivity_type_multiplier_high = float(
     np.exp(0.2898)  # high-type multiplier, matches jnp.exp(0.2898)
 )
+
+# Maps labor supply labels to intensive margin (fraction of full-time)
+_LABOR_INTENSITY = {"retired": 0.0, "part_time": 0.5, "full_time": 1.0}
 
 _HEALTH_FIELDS = [f.name for f in dataclasses.fields(Health)]
 _EDUCATION_FIELDS = [f.name for f in dataclasses.fields(Education)]
@@ -82,21 +88,70 @@ MOMENT_INDEX = _build_moment_index()
 empirical_moments = pd.Series(
     np.array(
         [
-            0.6508581, 0.7660204, 0.8232445, 0.6193264,
-            0.5055072, 0.5830671, 0.6008949, 0.4091998,
-            0.6777659, 0.6769325, 0.6802505, 0.6992036, 0.7301746, 0.7237555,
-            0.6426084, 0.6227545, 0.627258, 0.6552106, 0.6968261, 0.6921402,
-            0.7790819, 0.7702285, 0.7660254, 0.7634262, 0.779154, 0.7724553,
-            0.7517721, 0.7435739, 0.736526, 0.7381558, 0.750504, 0.734436,
-            0.0619297, 0.516081, 1.165899, 1.651459, 1.567324, 1.006182,
+            0.6508581,
+            0.7660204,
+            0.8232445,
+            0.6193264,
+            0.5055072,
+            0.5830671,
+            0.6008949,
+            0.4091998,
+            0.6777659,
+            0.6769325,
+            0.6802505,
+            0.6992036,
+            0.7301746,
+            0.7237555,
+            0.6426084,
+            0.6227545,
+            0.627258,
+            0.6552106,
+            0.6968261,
+            0.6921402,
+            0.7790819,
+            0.7702285,
+            0.7660254,
+            0.7634262,
+            0.779154,
+            0.7724553,
+            0.7517721,
+            0.7435739,
+            0.736526,
+            0.7381558,
+            0.750504,
+            0.734436,
+            0.0619297,
+            0.516081,
+            1.165899,
+            1.651459,
+            1.567324,
+            1.006182,
             1.237489,
-            0.2672905, 0.3283083, 0.4041793,
-            8.49264942390098, 0.1610319, 0.7456731, 1.163207,
-            35.39329, 49.37886, 55.95501, 42.21932,
-            24.94774, 33.16593, 36.69067, 25.31111,
-            59.48338, 89.53806, 107.9282, 98.27698,
-            50.38816, 66.25301, 78.31755, 63.1325,
-            0.5952184, 0.4770515,
+            0.2672905,
+            0.3283083,
+            0.4041793,
+            8.49264942390098,
+            0.1610319,
+            0.7456731,
+            1.163207,
+            35.39329,
+            49.37886,
+            55.95501,
+            42.21932,
+            24.94774,
+            33.16593,
+            36.69067,
+            25.31111,
+            59.48338,
+            89.53806,
+            107.9282,
+            98.27698,
+            50.38816,
+            66.25301,
+            78.31755,
+            63.1325,
+            0.5952184,
+            0.4770515,
         ]
     ),
     index=MOMENT_INDEX,
@@ -105,28 +160,77 @@ empirical_moments = pd.Series(
 moment_sd = pd.Series(
     np.array(
         [
-            0.0022079, 0.001673, 0.0015903, 0.0024375,
-            0.0078668, 0.0054486, 0.0045718, 0.0045788,
-            0.0019615, 0.0016137, 0.0016517, 0.0018318, 0.0016836, 0.0022494,
-            0.0066662, 0.0047753, 0.0035851, 0.0031197, 0.0027306, 0.0025937,
-            0.0024741, 0.0019636, 0.0019423, 0.0022411, 0.0024561, 0.0037815,
-            0.0107689, 0.0082543, 0.0063126, 0.0051546, 0.0050761, 0.0057938,
-            0.0031501, 0.0146831, 0.023547, 0.037393, 0.042682, 0.0473329,
+            0.0022079,
+            0.001673,
+            0.0015903,
+            0.0024375,
+            0.0078668,
+            0.0054486,
+            0.0045718,
+            0.0045788,
+            0.0019615,
+            0.0016137,
+            0.0016517,
+            0.0018318,
+            0.0016836,
+            0.0022494,
+            0.0066662,
+            0.0047753,
+            0.0035851,
+            0.0031197,
+            0.0027306,
+            0.0025937,
+            0.0024741,
+            0.0019636,
+            0.0019423,
+            0.0022411,
+            0.0024561,
+            0.0037815,
+            0.0107689,
+            0.0082543,
+            0.0063126,
+            0.0051546,
+            0.0050761,
+            0.0057938,
+            0.0031501,
+            0.0146831,
+            0.023547,
+            0.037393,
+            0.042682,
+            0.0473329,
             0.0029621,
-            0.0037247, 0.0030799, 0.0039969,
-            0.594830904063775, 0.0004399, 0.0035907, 0.0221391,
-            0.1955369, 0.2318309, 0.2660378, 0.3528976,
-            0.5630693, 0.5187444, 0.4988166, 0.4986972,
-            0.4875483, 0.631705, 0.7607303, 1.108492,
-            1.848723, 1.65571, 1.688008, 1.78551,
-            0.0023382, 0.0015815,
+            0.0037247,
+            0.0030799,
+            0.0039969,
+            0.594830904063775,
+            0.0004399,
+            0.0035907,
+            0.0221391,
+            0.1955369,
+            0.2318309,
+            0.2660378,
+            0.3528976,
+            0.5630693,
+            0.5187444,
+            0.4988166,
+            0.4986972,
+            0.4875483,
+            0.631705,
+            0.7607303,
+            1.108492,
+            1.848723,
+            1.65571,
+            1.688008,
+            1.78551,
+            0.0023382,
+            0.0015815,
         ]
     ),
     index=MOMENT_INDEX,
 )
 
 
-def _assign_intervals(res):
+def _assign_intervals(*, res):
     """Add interval columns for groupby aggregation."""
     res["interval_5"] = pd.cut(
         res["period"],
@@ -146,28 +250,28 @@ def _assign_intervals(res):
     return res
 
 
-def _fill_grouped_moments(moments, grouped, name, keys):
+def _fill_grouped_moments(*, moments, grouped, name, keys):
     """Fill moments Series from a groupby result."""
     for key in keys:
         label = (name, *key) if isinstance(key, tuple) else (name, key)
         moments[str(label)] = grouped.loc[key]
 
 
-def simulate_moments(params):
+def simulate_moments(*, params):
     """Compute 64 target moments from simulated data."""
-    res = model_solve_and_simulate(params)
-    res = _assign_intervals(res)
+    res = model_solve_and_simulate(params=params)
+    res = _assign_intervals(res=res)
     moments = pd.Series(0.0, index=MOMENT_INDEX)
 
-    # Working pct by (health, 4 intervals)
+    # Working pct by (health, 4 intervals) — intensive margin
     working = res.groupby(["health", "interval_4"])["labor_supply"].agg(
-        lambda x: (x != "retired").sum() / len(x)
+        lambda x: x.map(_LABOR_INTENSITY).mean()
     )
     _fill_grouped_moments(
-        moments,
-        working,
-        "working_pct",
-        [(h, i) for h in _HEALTH_FIELDS for i in _INTERVAL_LABELS_4],
+        moments=moments,
+        grouped=working,
+        name="working_pct",
+        keys=[(h, i) for h in _HEALTH_FIELDS for i in _INTERVAL_LABELS_4],
     )
 
     # Avg effort by (education, health, 6 intervals)
@@ -175,10 +279,10 @@ def simulate_moments(params):
         "effort_value"
     ].mean()
     _fill_grouped_moments(
-        moments,
-        avg_effort,
-        "avg_effort",
-        [
+        moments=moments,
+        grouped=avg_effort,
+        name="avg_effort",
+        keys=[
             (e, h, i)
             for e in _EDUCATION_FIELDS
             for h in _HEALTH_FIELDS
@@ -190,10 +294,10 @@ def simulate_moments(params):
     avg_income = res.groupby(["education", "health", "interval_4"])["income"].mean()
     avg_income = avg_income * _wealth_normalization[1] / 1000
     _fill_grouped_moments(
-        moments,
-        avg_income,
-        "avg_income",
-        [
+        moments=moments,
+        grouped=avg_income,
+        name="avg_income",
+        keys=[
             (e, h, i)
             for e in _EDUCATION_FIELDS
             for h in _HEALTH_FIELDS
@@ -203,18 +307,28 @@ def simulate_moments(params):
 
     # Median wealth by (6 intervals)
     median_wealth = res.groupby("interval_5")["wealth"].median()
-    _fill_grouped_moments(moments, median_wealth, "median_wealth", _INTERVAL_LABELS_6)
+    _fill_grouped_moments(
+        moments=moments,
+        grouped=median_wealth,
+        name="median_wealth",
+        keys=_INTERVAL_LABELS_6,
+    )
 
-    # Employment ratio (high edu / low edu)
+    # Employment ratio (high edu / low edu) — intensive margin
     emp_by_edu = res.groupby("education")["labor_supply"].agg(
-        lambda x: (x != "retired").sum() / len(x)
+        lambda x: x.map(_LABOR_INTENSITY).mean()
     )
     moments[str(("employment_ratio",))] = emp_by_edu.loc["high"] / emp_by_edu.loc["low"]
 
-    # Non-adjusters by 10-year intervals
+    # Non-adjusters by 20-year intervals
     res["is_non_adjuster"] = res["effort_value"] == res["lagged_effort_value"]
     non_adj = res.groupby("interval_10")["is_non_adjuster"].mean()
-    _fill_grouped_moments(moments, non_adj, "non_adjusters", _INTERVAL_LABELS_10)
+    _fill_grouped_moments(
+        moments=moments,
+        grouped=non_adj,
+        name="non_adjusters",
+        keys=_INTERVAL_LABELS_10,
+    )
 
     # Scalar moments
     health_good_count = (res["health"] == "good").sum()
@@ -245,5 +359,5 @@ def simulate_moments(params):
     avg_income_pre_ret = res.loc[res["period"] < retirement_period, "income"].mean()
     moments[str(("pension_income_ratio",))] = pension_avg / avg_income_pre_ret
 
-    print(moments.values)
+    _log.info(moments.values)
     return moments

@@ -137,9 +137,9 @@ _HEALTH_FIELDS = [f.name for f in dataclasses.fields(Health)]
 _INTERVAL_LABELS = ["35-44", "45-54", "55-64", "65-74", "75-84"]
 
 
-def simulate_wealth(params):
+def simulate_wealth(*, params):
     """Compute median wealth by health status and age interval."""
-    res = model_solve_and_simulate(params)
+    res = model_solve_and_simulate(params=params)
     res["interval_5"] = pd.cut(
         res["period"],
         bins=[-1, 5, 10, 15, 20, 25, 30],
@@ -159,7 +159,7 @@ reader = om.SQLiteLogReader("../optim_results/pd_var_2_real.db")
 history = reader.read_history()
 min_ind = np.argmin(np.asarray(history.fun))
 min_params = history.params[min_ind]
-wealth = simulate_wealth(min_params)
+wealth = simulate_wealth(params=min_params)
 
 fig = go.Figure()
 trace3 = go.Scatter(

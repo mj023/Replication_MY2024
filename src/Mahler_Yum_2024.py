@@ -66,8 +66,8 @@ class Education:
     high: int
 
 
-Effort = make_dataclass(
-    "HealthEffort", [("class" + str(i), int, int(i)) for i in range(40)]
+Effort = categorical(ordered=True)(
+    make_dataclass("Effort", [(f"level_{i}", int) for i in range(40)])
 )
 
 
@@ -609,7 +609,7 @@ _HEALTH_LABELS = {0: "bad", 1: "good"}
 _EDUCATION_LABELS = {0: "low", 1: "high"}
 _PRODUCTIVITY_LABELS = {0: "low", 1: "high"}
 _HEALTH_TYPE_LABELS = {0: "low", 1: "high"}
-_EFFORT_LABELS = {i: f"class{i}" for i in range(40)}
+_EFFORT_LABELS = {i: f"level_{i}" for i in range(40)}
 
 
 def _compute_income_normalization(sigx):
@@ -731,7 +731,7 @@ def create_inputs(seed, n_simulation_subjects, params):
             ),
             "lagged_effort": pd.Categorical(
                 [_EFFORT_LABELS[int(v)] for v in initial_effort],
-                categories=[f"class{i}" for i in range(40)],
+                categories=[f"level_{i}" for i in range(40)],
             ),
             "education": pd.Categorical(
                 [_EDUCATION_LABELS[int(v)] for v in initial_education],

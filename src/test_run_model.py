@@ -61,7 +61,7 @@ def test_period_0_policy_matches_old_pylcm():
     )
 
     health_labels = {0: "bad", 1: "good"}
-    effort_labels = {i: f"class{i}" for i in range(40)}
+    effort_labels = {i: f"level_{i}" for i in range(40)}
 
     xvalues = prod_shock_grid.get_gridpoints()
     uniform_gridpoints = np.linspace(0, 1, 5)
@@ -77,7 +77,7 @@ def test_period_0_policy_matches_old_pylcm():
             ),
             "lagged_effort": pd.Categorical(
                 [effort_labels[int(v)] for v in old_effort],
-                categories=[f"class{i}" for i in range(40)],
+                categories=[f"level_{i}" for i in range(40)],
             ),
             "education": new_ic_df["education"],
             "productivity": new_ic_df["productivity"],

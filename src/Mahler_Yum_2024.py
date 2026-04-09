@@ -26,7 +26,6 @@ from lcm.typing import (
     FloatND,
     Period,
 )
-from lcm.utils.dispatchers import productmap
 
 _DATA_DIR = Path(__file__).parent
 
@@ -113,43 +112,6 @@ health_effort_coefficients = jnp.asarray([0.693, 0.734])
 good_health_coefficient: float = 2.311
 health_type_coefficient: float = 0.632
 college_coefficient: float = 0.238
-
-
-def _health_transition(period, health, eff, eff_1, edu, ht):
-    y = (
-        health_intercept
-        + health_age_effects[period]
-        + edu * college_coefficient
-        + health * good_health_coefficient
-        + ht * health_type_coefficient
-        + effort_grid[eff] * health_effort_coefficients[0]
-        + effort_grid[eff_1] * health_effort_coefficients[1]
-    )
-    return jnp.exp(y) / (1.0 + jnp.exp(y))
-
-
-_health_trans_variables = ("period", "health", "eff", "eff_1", "edu", "ht")
-_mapped_health_transition = productmap(
-    func=_health_transition,
-    variables=_health_trans_variables,
-    batch_sizes=dict.fromkeys(_health_trans_variables, 0),
-)
-
-health_transition_probs = jnp.zeros((38, 2, 40, 40, 2, 2, 2))
-_age_groups = jnp.floor_divide(jnp.arange(38), 5)
-health_transition_probs = health_transition_probs.at[:, :, :, :, :, :, 1].set(
-    _mapped_health_transition(
-        period=_age_groups,
-        health=jnp.arange(2),
-        eff=jnp.arange(40),
-        eff_1=jnp.arange(40),
-        edu=jnp.arange(2),
-        ht=jnp.arange(2),
-    )
-)
-health_transition_probs = health_transition_probs.at[:, :, :, :, :, :, 0].set(
-    1.0 - health_transition_probs[:, :, :, :, :, :, 1]
-)
 
 
 def _load_survival_probs():
@@ -314,11 +276,26 @@ def next_health(
     lagged_effort: DiscreteState,
     education: DiscreteState,
     health_type: DiscreteState,
-    transition_probs: FloatND,
+    health_intercept: float,
+    health_age_effects: FloatND,
+    good_health_coefficient: float,
+    health_type_coefficient: float,
+    college_coefficient: float,
+    health_effort_coefficients: FloatND,
 ) -> FloatND:
-    return transition_probs[
-        period, health, effort, lagged_effort, education, health_type
-    ]
+    """Compute health transition probabilities via logit model."""
+    age_group = period // 5
+    y = (
+        health_intercept
+        + health_age_effects[age_group]
+        + education * college_coefficient
+        + health * good_health_coefficient
+        + health_type * health_type_coefficient
+        + effort_grid[effort] * health_effort_coefficients[0]
+        + effort_grid[lagged_effort] * health_effort_coefficients[1]
+    )
+    prob_good = jnp.exp(y) / (1.0 + jnp.exp(y))
+    return jnp.array([1.0 - prob_good, prob_good])
 
 
 def next_lagged_effort(effort: DiscreteAction) -> DiscreteState:
@@ -417,7 +394,14 @@ MAHLER_YUM_MODEL = Model(
     fixed_params={
         "alive": {
             "consumption_utility": {"sigma": risk_aversion},
-            "next_health": {"transition_probs": health_transition_probs},
+            "next_health": {
+                "health_intercept": health_intercept,
+                "health_age_effects": health_age_effects,
+                "good_health_coefficient": good_health_coefficient,
+                "health_type_coefficient": health_type_coefficient,
+                "college_coefficient": college_coefficient,
+                "health_effort_coefficients": health_effort_coefficients,
+            },
             "next_regime": {"transition_probs": survival_probs},
         },
     },

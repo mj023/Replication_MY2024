@@ -36,7 +36,8 @@ avg_earnings_raw = 57706.57
 productivity_type_multiplier = jnp.array([jnp.exp(-0.2898), jnp.exp(0.2898)])
 ages = AgeGrid(start=25, stop=101, step="2Y")
 n_periods = ages.n_periods
-retirement_period = 19
+retirement_age = 63
+retirement_period = ages.age_to_period(retirement_age)
 labor_tax_rate = 0.128
 tax_scale = 1.0 - 0.321
 shock_persistence = 0.975
@@ -646,12 +647,12 @@ def _compute_income_normalization(sigx):
 
 
 def _compute_pension_base(income_process, income_normalization):
-    """Compute base income at retirement (period 19, good health) by education."""
+    """Compute base income at retirement age in good health, by education."""
     y1 = income_process["y1"]
     yt_s = income_process["yt_s"]
     yt_sq = income_process["yt_sq"]
     wagep = income_process["wagep"]
-    period = 19.0
+    period = float(ages.age_to_period(retirement_age))
     health = 1.0  # good health
     pension_base = jnp.zeros(2)
     for edu_idx, edu_key in enumerate(["low", "high"]):

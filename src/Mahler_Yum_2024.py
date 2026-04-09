@@ -135,7 +135,7 @@ def _load_survival_probs():
         for edu_label, surv_data in [("low", surv_hs), ("high", surv_cl)]:
             for health_idx, health_label in enumerate(["good", "bad"]):
                 if period_idx >= n_data_rows - 1:
-                    prob = 0.0  # certain death at terminal transition
+                    prob = 0.0
                 else:
                     prob = surv_data[period_idx, health_idx]
                 records.append((age, edu_label, health_label, prob))
@@ -350,9 +350,10 @@ def next_regime(
     health: DiscreteState,
     transition_probs: FloatND,
 ) -> FloatND:
-    """Return probability array [P(alive), P(dead)] indexed by RegimeId."""
+    """Return regime transition probabilities indexed by RegimeId."""
     survival_prob = transition_probs[period, education, health]
-    return jnp.array([survival_prob, 1 - survival_prob])
+    probs = jnp.zeros(2).at[RegimeId.alive].set(survival_prob)
+    return probs.at[RegimeId.dead].set(1.0 - survival_prob)
 
 
 def retirement_constraint(period: Period, labor_supply: DiscreteAction) -> BoolND:

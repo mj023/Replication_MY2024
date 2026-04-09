@@ -153,15 +153,18 @@ log_opts = om.SQLiteLogOptions(path="pd_var_2.db", if_database_exists="replace")
 
 start_params = START_PARAMS.copy()
 
+_wd_ages = ("27", "41", "51", "65")
+_ec_ages = ("27", "49", "65", "87")
+
 lower_bounds = {
-    "work_disutility": pd.DataFrame(
-        {"bad": [0.0] * 4, "good": [0.0] * 4},
-        index=[1, 8, 13, 20],
-    ),
+    "work_disutility": {
+        "bad": dict.fromkeys(_wd_ages, 0.0),
+        "good": dict.fromkeys(_wd_ages, 0.0),
+    },
     "education_disutility_adj": 0.0,
     "effort_cost": {
-        "low": {"bad": [0.0] * 4, "good": [0.0] * 4},
-        "high": {"bad": [0.0] * 4, "good": [0.0] * 4},
+        "low": {"bad": dict.fromkeys(_ec_ages, 0.0), "good": dict.fromkeys(_ec_ages, 0.0)},
+        "high": {"bad": dict.fromkeys(_ec_ages, 0.0), "good": dict.fromkeys(_ec_ages, 0.0)},
     },
     "income_process": {
         "y1": pd.Series({"low": 0.0, "high": 0.0}),
@@ -179,14 +182,14 @@ lower_bounds = {
 }
 
 upper_bounds = {
-    "work_disutility": pd.DataFrame(
-        {"bad": [4.0] * 4, "good": [4.0] * 4},
-        index=[1, 8, 13, 20],
-    ),
+    "work_disutility": {
+        "bad": dict.fromkeys(_wd_ages, 4.0),
+        "good": dict.fromkeys(_wd_ages, 4.0),
+    },
     "education_disutility_adj": 1.5,
     "effort_cost": {
-        "low": {"bad": [3.0] * 4, "good": [3.0] * 4},
-        "high": {"bad": [3.0] * 4, "good": [3.0] * 4},
+        "low": {"bad": dict.fromkeys(_ec_ages, 3.0), "good": dict.fromkeys(_ec_ages, 3.0)},
+        "high": {"bad": dict.fromkeys(_ec_ages, 3.0), "good": dict.fromkeys(_ec_ages, 3.0)},
     },
     "income_process": {
         "y1": pd.Series({"low": 2.0, "high": 2.0}),

@@ -29,21 +29,33 @@ model = MAHLER_YUM_MODEL
 _wealth_normalization = jnp.array([43978, 48201])
 
 
+def _age_keys_to_periods(age_keyed_dict):
+    """Convert {"27": val, "41": val, ...} to 1-based period-indexed arrays.
+
+    The grid creation functions use 1-based period indexing (period 1 = age 27,
+    period 2 = age 29, etc.) for the interpolation knots.
+
+    """
+    start_age = int(ages.values[0])
+    step = int(ages.values[1] - ages.values[0])
+    knot_ages = np.array([int(k) for k in age_keyed_dict])
+    knot_periods = (knot_ages - start_age) // step
+    values = np.array(list(age_keyed_dict.values()))
+    return knot_periods, values
+
+
 def create_work_disutility_grid(work_disutility, education_disutility_adj):
     """Interpolate work disutility knots to full period grid.
 
     Args:
-        work_disutility: DataFrame with columns "bad", "good" and period index.
+        work_disutility: Dict {"bad": {"27": v, ...}, "good": {"27": v, ...}}.
         education_disutility_adj: Scalar education adjustment factor.
 
     """
     grid = jnp.zeros((retirement_period + 1, 2, 2))
     for j, health in enumerate(["bad", "good"]):
-        spline = scipy_interp1d(
-            np.asarray(work_disutility.index),
-            np.asarray(work_disutility[health]),
-            kind="cubic",
-        )
+        knot_periods, knot_values = _age_keys_to_periods(work_disutility[health])
+        spline = scipy_interp1d(knot_periods, knot_values, kind="cubic")
         interp_points = jnp.arange(1, retirement_period + 2)
         temp_grid = jnp.asarray(spline(interp_points))
         grid = grid.at[:, 0, j].set(temp_grid * jnp.exp(education_disutility_adj))
@@ -56,19 +68,18 @@ def create_effort_cost_grid(effort_cost):
 
     Args:
         effort_cost: Nested dict
-            {"low": {"bad": [...], "good": [...]}, "high": {...}}.
+            {"low": {"bad": {"27": v, ...}, ...}, "high": {...}}.
 
     """
-    knot_periods = np.array([1, 12, 20, 31])
     grid = jnp.zeros((n_periods, 2, 2))
     for i, edu in enumerate(["low", "high"]):
         for j, health in enumerate(["bad", "good"]):
-            knots = np.asarray(effort_cost[edu][health])
-            spline = scipy_interp1d(knot_periods, knots, kind="cubic")
+            knot_periods, knot_values = _age_keys_to_periods(effort_cost[edu][health])
+            spline = scipy_interp1d(knot_periods, knot_values, kind="cubic")
             interp_points = np.arange(1, 31)
             temp_grid = jnp.asarray(spline(interp_points))
             grid = grid.at[0:30, i, j].set(temp_grid)
-            grid = grid.at[30:n_periods, i, j].set(knots[-1])
+            grid = grid.at[30:n_periods, i, j].set(knot_values[-1])
     return grid
 
 

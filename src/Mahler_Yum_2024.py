@@ -36,7 +36,7 @@ avg_earnings_raw = 57706.57
 productivity_type_multiplier = jnp.array([jnp.exp(-0.2898), jnp.exp(0.2898)])
 ages = AgeGrid(start=25, stop=101, step="2Y")
 n_periods = ages.n_periods
-retirement_age = 63
+retirement_age = 65
 retirement_period = ages.age_to_period(retirement_age)
 labor_tax_rate = 0.128
 tax_scale = 1.0 - 0.321
@@ -291,7 +291,7 @@ def benefits(
 ) -> FloatND:
     eligible = jnp.logical_and(health == 0, labor_supply == 0)
     return jnp.where(
-        jnp.logical_and(eligible, period <= retirement_period),
+        jnp.logical_and(eligible, period < retirement_period),
         benefit_rate * avg_earnings,
         0,
     )
@@ -306,7 +306,7 @@ def pension(
     productivity_type_multiplier: FloatND,
 ) -> FloatND:
     return jnp.where(
-        period > retirement_period,
+        period >= retirement_period,
         pension_base[education]
         * productivity_type_multiplier[productivity]
         * pension_replacement_rate,
@@ -365,7 +365,7 @@ def next_regime(
 
 def retirement_constraint(period: Period, labor_supply: DiscreteAction) -> BoolND:
     return jnp.logical_not(
-        jnp.logical_and(period > retirement_period, labor_supply > 0)
+        jnp.logical_and(period >= retirement_period, labor_supply > 0)
     )
 
 
@@ -563,13 +563,13 @@ def _interpolate_knots(age_keyed_dict, period_range, flat_after=None):
 def create_work_disutility_grid(work_disutility, education_disutility_adjustment):
     """Interpolate work disutility knots to a labeled Series."""
     age_values = np.asarray(ages.values)
-    period_range = np.arange(1, retirement_period + 2)
+    period_range = np.arange(1, retirement_period + 1)
     records = []
     for health in ["bad", "good"]:
         values = _interpolate_knots(work_disutility[health], period_range)
         for period_idx, age in enumerate(age_values):
             for edu in ["low", "high"]:
-                if period_idx <= retirement_period:
+                if period_idx < retirement_period:
                     factor = (
                         np.exp(education_disutility_adjustment) if edu == "low" else 1.0
                     )
@@ -652,7 +652,7 @@ def _compute_pension_base(income_process, income_normalization):
     yt_s = income_process["yt_s"]
     yt_sq = income_process["yt_sq"]
     wagep = income_process["wagep"]
-    period = float(ages.age_to_period(retirement_age))
+    period = float(retirement_period - 1)  # last working period
     health = 1.0  # good health
     pension_base = jnp.zeros(2)
     for edu_idx, edu_key in enumerate(["low", "high"]):

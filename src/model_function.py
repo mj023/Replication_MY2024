@@ -27,8 +27,6 @@ _ADDITIONAL_TARGETS = [
     "consumption",
     "effort_value",
     "lagged_effort_value",
-    "wealth_level",
-    "saving_level",
 ]
 
 
@@ -196,7 +194,7 @@ def simulate_moments(params):
     )
 
     # Median wealth by (6 intervals)
-    median_wealth = res.groupby("interval_5")["wealth_level"].median()
+    median_wealth = res.groupby("interval_5")["wealth"].median()
     _fill_grouped_moments(moments, median_wealth, "median_wealth", _INTERVAL_LABELS_6)
 
     # Employment ratio (high edu / low edu)
@@ -220,7 +218,7 @@ def simulate_moments(params):
         res["utility"].mean() / avg_kappa * (res["consumption"].mean() ** -2)
     )
     moments[str(("effort_std",))] = res["effort_value"].std()
-    moments[str(("wealth_gini",))] = gini(jnp.asarray(res["wealth_level"].to_numpy()))
+    moments[str(("wealth_gini",))] = gini(jnp.asarray(res["wealth"].to_numpy()))
 
     cons_by_health = res.groupby("health")["consumption"].mean()
     moments[str(("consumption_ratio",))] = (
@@ -258,7 +256,7 @@ def simulate_wealth(params):
             for interval in intervals
         ],
     )
-    median_wealth = res.groupby(["health", "interval_5"])["wealth_level"].median()
+    median_wealth = res.groupby(["health", "interval_5"])["wealth"].median()
     for health in _HEALTH_LABELS:
         for interval in intervals:
             moments[f"median_wealth_{health}_{interval}"] = median_wealth.loc[

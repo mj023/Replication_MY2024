@@ -13,7 +13,7 @@ from jax import random
 from lcm import (
     AgeGrid,
     DiscreteGrid,
-    LinSpacedGrid,
+    IrregSpacedGrid,
     MarkovTransition,
     Model,
     Regime,
@@ -48,13 +48,9 @@ min_consumption_share = 0.10
 min_consumption = min_consumption_share * avg_earnings
 
 
-def wealth_to_level(x):
-    """Convert grid index to wealth level via log-spaced transformation."""
-    x = ((jnp.log(10.0**2) - jnp.log(10.0**0)) / 49) * x
-    x = jnp.exp(x)
-    xgrid = x - 10.0 ** (0.0)
-    xgrid = xgrid / (10.0**2 - 10.0**0.0)
-    return xgrid * (30 - 0) + 0
+_WEALTH_GRID_POINTS = tuple(
+    float(30.0 * (jnp.exp(jnp.log(100.0) / 49 * i) - 1.0) / 99.0) for i in range(50)
+)
 
 
 @categorical(ordered=True)
@@ -149,9 +145,6 @@ def _load_survival_probs():
     return df.set_index(["age", "education", "health"])["survival_probability"]
 
 
-survival_probs = _load_survival_probs()
-
-
 def utility(
     adjustment_cost_penalty: FloatND,
     effort_cost: FloatND,
@@ -189,16 +182,6 @@ def adjustment_cost_penalty(
     )
 
 
-def wealth_level(wealth: ContinuousState) -> FloatND:
-    """Convert wealth grid index to actual wealth level."""
-    return wealth_to_level(wealth)
-
-
-def saving_level(saving: ContinuousAction) -> FloatND:
-    """Convert saving grid index to actual saving level."""
-    return wealth_to_level(saving)
-
-
 def effort_value(effort: DiscreteAction, effort_grid: FloatND) -> FloatND:
     """Map effort class index to continuous [0, 1] value."""
     return effort_grid[effort]
@@ -210,11 +193,10 @@ def lagged_effort_value(lagged_effort: DiscreteState, effort_grid: FloatND) -> F
 
 
 def consumption(
-    net_income: FloatND, wealth_level: FloatND, saving_level: FloatND
+    net_income: FloatND, wealth: ContinuousState, saving: ContinuousAction
 ) -> FloatND:
     return jnp.maximum(
-        net_income + wealth_level * gross_interest_rate - saving_level,
-        min_consumption,
+        net_income + wealth * gross_interest_rate - saving, min_consumption
     )
 
 
@@ -380,9 +362,9 @@ def retirement_constraint(period: Period, labor_supply: DiscreteAction) -> BoolN
 
 
 def savings_constraint(
-    net_income: FloatND, wealth_level: FloatND, saving_level: FloatND
+    net_income: FloatND, wealth: ContinuousState, saving: ContinuousAction
 ) -> BoolND:
-    return net_income + wealth_level * gross_interest_rate >= saving_level
+    return net_income + wealth * gross_interest_rate >= saving
 
 
 def alive_is_active(age: int, final_age_alive: float) -> bool:
@@ -397,7 +379,7 @@ ALIVE_REGIME = Regime(
     transition=MarkovTransition(next_regime),
     active=partial(alive_is_active, final_age_alive=ages.values[-2]),
     states={
-        "wealth": LinSpacedGrid(start=0, stop=49, n_points=50),
+        "wealth": IrregSpacedGrid(points=_WEALTH_GRID_POINTS),
         "health": DiscreteGrid(Health),
         "productivity_shock": prod_shock_grid,
         "lagged_effort": DiscreteGrid(Effort),
@@ -416,13 +398,11 @@ ALIVE_REGIME = Regime(
     },
     actions={
         "labor_supply": DiscreteGrid(LaborSupply),
-        "saving": LinSpacedGrid(start=0, stop=49, n_points=50),
+        "saving": IrregSpacedGrid(points=_WEALTH_GRID_POINTS),
         "effort": DiscreteGrid(Effort),
     },
     functions={
         "utility": utility,
-        "wealth_level": wealth_level,
-        "saving_level": saving_level,
         "effort_value": effort_value,
         "lagged_effort_value": lagged_effort_value,
         "work_disutility": work_disutility,
@@ -468,7 +448,7 @@ MAHLER_YUM_MODEL = Model(
                 "health_effort_coefficient": health_effort_coefficient,
                 "lagged_health_effort_coefficient": lagged_health_effort_coefficient,
             },
-            "next_regime": {"transition_probs": survival_probs},
+            "next_regime": {"transition_probs": _load_survival_probs()},
         },
     },
 )

@@ -28,7 +28,6 @@ from lcm.typing import (
     FloatND,
     Period,
 )
-from lcm.utils.dispatchers import productmap
 from scipy.interpolate import interp1d as scipy_interp1d
 
 _DATA_DIR = Path(__file__).parent
@@ -240,18 +239,34 @@ def scaled_productivity_shock(
     return productivity_shock * productivity_shock_scale
 
 
-def income(
-    labor_supply: DiscreteAction,
+def base_income(
     period: Period,
     health: DiscreteState,
     education: DiscreteState,
+    y1: FloatND,
+    yt_s: FloatND,
+    yt_sq: FloatND,
+    wagep: FloatND,
+    income_normalization: float,
+) -> FloatND:
+    """Compute base income for a given (period, health, education) combination."""
+    yt = (
+        y1[education]
+        * jnp.exp(yt_s[education] * period + yt_sq[education] * period**2.0)
+        * (1.0 - wagep[education] * (1.0 - health))
+    )
+    return yt / income_normalization
+
+
+def income(
+    labor_supply: DiscreteAction,
     productivity: DiscreteState,
     scaled_productivity_shock: FloatND,
-    base_income_grid: FloatND,
+    base_income: FloatND,
     productivity_type_multiplier: FloatND,
 ) -> FloatND:
     return (
-        base_income_grid[period, health, education]
+        base_income
         * (labor_supply / 2)
         * productivity_type_multiplier[productivity]
         * jnp.exp(scaled_productivity_shock)
@@ -279,13 +294,13 @@ def pension(
     period: Period,
     education: DiscreteState,
     productivity: DiscreteState,
-    base_income_grid: FloatND,
+    pension_base: FloatND,
     pension_replacement_rate: float,
     productivity_type_multiplier: FloatND,
 ) -> FloatND:
     return jnp.where(
         period > retirement_period,
-        base_income_grid[19, 1, education]
+        pension_base[education]
         * productivity_type_multiplier[productivity]
         * pension_replacement_rate,
         0,
@@ -395,6 +410,7 @@ ALIVE_REGIME = Regime(
         "effort_cost": effort_cost,
         "consumption_utility": consumption_utility,
         "consumption": consumption,
+        "base_income": base_income,
         "income": income,
         "benefits": benefits,
         "adjustment_cost_penalty": adjustment_cost_penalty,
@@ -571,42 +587,6 @@ def create_adjustment_cost_envelope(adjustment_cost):
     return jnp.maximum(adjustment_cost[0] * jnp.exp(adjustment_cost[1] * t), 0)
 
 
-def create_base_income_grid(income_process):
-    """Build base income grid from income process parameters."""
-    sigx = income_process["sigx"]
-    sdztemp = ((sigx**2.0) / (1.0 - shock_persistence**2.0)) ** 0.5
-    j = jnp.arange(20)
-    health = jnp.arange(2)
-    education = jnp.arange(2)
-
-    y1 = income_process["y1"]
-    yt_s = income_process["yt_s"]
-    yt_sq = income_process["yt_sq"]
-    wagep = income_process["wagep"]
-
-    def calc_base(_period, health, education):
-        yt = jnp.where(
-            education == 1,
-            (
-                y1["high"]
-                * jnp.exp(yt_s["high"] * _period + yt_sq["high"] * _period**2.0)
-            )
-            * (1.0 - wagep["high"] * (1 - health)),
-            (y1["low"] * jnp.exp(yt_s["low"] * _period + yt_sq["low"] * _period**2.0))
-            * (1.0 - wagep["low"] * (1 - health)),
-        )
-        return yt / (
-            jnp.exp(((jnp.log(productivity_type_multiplier[1]) ** 2.0) ** 2.0) / 2.0)
-            * jnp.exp(((sdztemp**2.0) ** 2.0) / 2.0)
-        )
-
-    variables = ("_period", "health", "education")
-    mapped = productmap(
-        func=calc_base, variables=variables, batch_sizes=dict.fromkeys(variables, 0)
-    )
-    return mapped(_period=j, health=health, education=education)
-
-
 # Initial type distribution arrays
 _discount = jnp.zeros((16), dtype=jnp.int8)
 _prod = jnp.zeros((16), dtype=jnp.int8)
@@ -633,9 +613,35 @@ _HEALTH_TYPE_LABELS = {0: "low", 1: "high"}
 _EFFORT_LABELS = {i: f"class{i}" for i in range(40)}
 
 
+def _compute_income_normalization(sigx):
+    """Compute the income normalization denominator from shock variance."""
+    sdztemp = ((sigx**2.0) / (1.0 - shock_persistence**2.0)) ** 0.5
+    return jnp.exp(
+        ((jnp.log(productivity_type_multiplier[1]) ** 2.0) ** 2.0) / 2.0
+    ) * jnp.exp(((sdztemp**2.0) ** 2.0) / 2.0)
+
+
+def _compute_pension_base(income_process, income_normalization):
+    """Compute base income at retirement (period 19, good health) by education."""
+    y1 = income_process["y1"]
+    yt_s = income_process["yt_s"]
+    yt_sq = income_process["yt_sq"]
+    wagep = income_process["wagep"]
+    period = 19.0
+    health = 1.0  # good health
+    pension_base = jnp.zeros(2)
+    for edu_idx, edu_key in enumerate(["low", "high"]):
+        yt = (
+            y1[edu_key]
+            * jnp.exp(yt_s[edu_key] * period + yt_sq[edu_key] * period**2.0)
+            * (1.0 - wagep[edu_key] * (1.0 - health))
+        )
+        pension_base = pension_base.at[edu_idx].set(yt / income_normalization)
+    return pension_base
+
+
 def create_inputs(seed, n_simulation_subjects, params):
     """Build model params and initial conditions from structured parameters."""
-    base_income = create_base_income_grid(params["income_process"])
     cost_envelope = create_adjustment_cost_envelope(params["adjustment_cost"])
     xvalues = prod_shock_grid.get_gridpoints()
     xtrans = prod_shock_grid.get_transition_probs()
@@ -643,6 +649,11 @@ def create_inputs(seed, n_simulation_subjects, params):
     wd_grid = create_work_disutility_grid(
         params["work_disutility"], params["education_disutility_adjustment"]
     )
+
+    income_process = params["income_process"]
+    sigx = income_process["sigx"]
+    income_norm = _compute_income_normalization(sigx)
+    pension_base = _compute_pension_base(income_process, income_norm)
 
     model_params = {
         "work_disutility": {"work_disutility_grid": wd_grid},
@@ -654,15 +665,27 @@ def create_inputs(seed, n_simulation_subjects, params):
             "utility_constant": params["utility_constant"],
             "health_consumption_penalty": params["health_consumption_penalty"],
         },
-        "income": {"base_income_grid": base_income},
+        "base_income": {
+            "y1": jnp.array(
+                [income_process["y1"]["low"], income_process["y1"]["high"]]
+            ),
+            "yt_s": jnp.array(
+                [income_process["yt_s"]["low"], income_process["yt_s"]["high"]]
+            ),
+            "yt_sq": jnp.array(
+                [income_process["yt_sq"]["low"], income_process["yt_sq"]["high"]]
+            ),
+            "wagep": jnp.array(
+                [income_process["wagep"]["low"], income_process["wagep"]["high"]]
+            ),
+            "income_normalization": income_norm,
+        },
         "pension": {
-            "base_income_grid": base_income,
+            "pension_base": pension_base,
             "pension_replacement_rate": params["pension_replacement_rate"],
         },
         "adjustment_cost_penalty": {"adjustment_cost_envelope": cost_envelope},
-        "scaled_productivity_shock": {
-            "productivity_shock_scale": jnp.sqrt(params["income_process"]["sigx"])
-        },
+        "scaled_productivity_shock": {"productivity_shock_scale": jnp.sqrt(sigx)},
     }
 
     n = n_simulation_subjects

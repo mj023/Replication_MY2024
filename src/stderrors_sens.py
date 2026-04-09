@@ -143,6 +143,8 @@ moment_sd = np.asarray(
     ]
 )
 
+# Parameter order matches the flat keys stored in the optimization database.
+# These are the old pre-refactor names used during the original estimation run.
 param_order = [
     "nuh_1",
     "nuh_2",

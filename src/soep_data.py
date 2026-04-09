@@ -4,16 +4,14 @@ import numpy as np
 import optimagic as om
 import pandas as pd
 import plotly.graph_objects as go
-from jax import numpy as jnp
 
 from model_function import simulate_wealth
 
-# Set working directory
+WEALTH_NORMALIZATION = 48201
+
+# Set working directory — update this path for your machine
 path = "/home/mj023/Downloads/Soep/SOEP_V38"
 os.chdir(f"{path}")
-
-# Load raw data
-winit = jnp.array([43978, 48201])
 pl = pd.read_stata("pl_clean.dta")
 gather_frame = []
 
@@ -143,7 +141,7 @@ wealth = simulate_wealth(min_params)
 fig = go.Figure()
 trace3 = go.Scatter(
     x=["35-44", "45-54", "55-64", "65-74", "75-84"],
-    y=(wealth[0:5] * winit[1]) / 1000,
+    y=(wealth[0:5] * WEALTH_NORMALIZATION) / 1000,
     name="Healthy",
     mode="lines+markers",
     marker={"size": 6},
@@ -153,7 +151,7 @@ trace3 = go.Scatter(
 fig.add_trace(trace3)
 trace4 = go.Scatter(
     x=["35-44", "45-54", "55-64", "65-74", "75-84"],
-    y=(wealth[5:] * winit[1]) / 1000,
+    y=(wealth[5:] * WEALTH_NORMALIZATION) / 1000,
     name="Unhealthy",
     mode="lines+markers",
     marker={"size": 6},
@@ -206,7 +204,8 @@ fig.write_image(
 fig = go.Figure()
 trace3 = go.Scatter(
     x=["35-44", "45-54", "55-64", "65-74", "75-84"],
-    y=((wealth[0:5] * winit[1]) / 1000) / ((wealth[5:] * winit[1]) / 1000),
+    y=((wealth[0:5] * WEALTH_NORMALIZATION) / 1000)
+    / ((wealth[5:] * WEALTH_NORMALIZATION) / 1000),
     name="Model",
     mode="lines+markers",
     marker={"size": 6},

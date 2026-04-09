@@ -1,3 +1,4 @@
+import dataclasses
 import os
 
 import numpy as np
@@ -5,7 +6,7 @@ import optimagic as om
 import pandas as pd
 import plotly.graph_objects as go
 
-from model_function import simulate_wealth
+from Mahler_Yum_2024 import Health, model_solve_and_simulate
 
 WEALTH_NORMALIZATION = 48201
 
@@ -131,6 +132,28 @@ wealth_h = [wealth_1_h, wealth_2_h, wealth_3_h, wealth_4_h, wealth_5_h]
 wealth_uh = [wealth_1_u, wealth_2_u, wealth_3_u, wealth_4_u, wealth_5_u]
 path = "/home/mj023/Git/Econ_RL/src"
 os.chdir(f"{path}")
+
+_HEALTH_FIELDS = [f.name for f in dataclasses.fields(Health)]
+_INTERVAL_LABELS = ["35-44", "45-54", "55-64", "65-74", "75-84"]
+
+
+def simulate_wealth(params):
+    """Compute median wealth by health status and age interval."""
+    res = model_solve_and_simulate(params)
+    res["interval_5"] = pd.cut(
+        res["period"],
+        bins=[-1, 5, 10, 15, 20, 25, 30],
+        labels=["25-34", *_INTERVAL_LABELS],
+    )
+    median_wealth = res.groupby(["health", "interval_5"])["wealth"].median()
+    return pd.Series(
+        {
+            f"median_wealth_{health}_{interval}": median_wealth.loc[health, interval]
+            for health in _HEALTH_FIELDS
+            for interval in _INTERVAL_LABELS
+        }
+    )
+
 
 reader = om.SQLiteLogReader("../optim_results/pd_var_2_real.db")
 history = reader.read_history()

@@ -19,6 +19,7 @@ from lcm import (
     Regime,
     categorical,
 )
+from lcm.pandas_utils import initial_conditions_from_dataframe
 from lcm.typing import (
     BoolND,
     ContinuousAction,
@@ -784,3 +785,50 @@ def create_inputs(seed, n_simulation_subjects, params):
         discount_factor_small,
         discount_factor_large,
     )
+
+
+_ADDITIONAL_TARGETS = [
+    "utility",
+    "effort_cost",
+    "pension",
+    "income",
+    "consumption",
+    "effort_value",
+    "lagged_effort_value",
+]
+
+
+def model_solve_and_simulate(params):
+    """Solve and simulate for both discount factor types."""
+    (
+        common_params,
+        initial_conditions_df,
+        discount_types,
+        discount_factor_small,
+        discount_factor_large,
+    ) = create_inputs(seed=32, n_simulation_subjects=10000, params=params)
+
+    dfs = []
+    for discount_factor, type_id in [
+        (discount_factor_small, 0),
+        (discount_factor_large, 1),
+    ]:
+        mask = discount_types == type_id
+        type_df = initial_conditions_df.loc[mask].reset_index(drop=True)
+        type_initial = initial_conditions_from_dataframe(
+            df=type_df, model=MAHLER_YUM_MODEL
+        )
+
+        result = MAHLER_YUM_MODEL.simulate(
+            params={"alive": {"discount_factor": discount_factor, **common_params}},
+            initial_conditions=type_initial,
+            period_to_regime_to_V_arr=None,
+            seed=42,
+            log_level="off",
+        )
+        df = result.to_dataframe(additional_targets=_ADDITIONAL_TARGETS)
+        df["discount_type"] = type_id
+        dfs.append(df)
+
+    res = pd.concat(dfs, ignore_index=True)
+    return res.loc[res["regime"] == "alive"].copy()

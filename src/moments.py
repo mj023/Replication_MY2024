@@ -1,33 +1,29 @@
+"""Moment specification and computation for MSM estimation."""
+
+import dataclasses
+
 import jax.numpy as jnp
 import numpy as np
 import pandas as pd
-from lcm.pandas_utils import initial_conditions_from_dataframe
 
-from Mahler_Yum_2024 import MAHLER_YUM_MODEL, create_inputs
+from Mahler_Yum_2024 import (
+    Education,
+    Health,
+    _wealth_normalization,
+    model_solve_and_simulate,
+    retirement_period,
+)
 from utils import gini
 
-model = MAHLER_YUM_MODEL
-
 _productivity_type_multiplier_high = float(
-    model.fixed_params["alive"]["productivity_type_multiplier"][1]  # ty: ignore[not-subscriptable, invalid-argument-type]
+    np.exp(0.2898)  # high-type multiplier, matches jnp.exp(0.2898)
 )
-_WEALTH_NORMALIZATION = 48201
-_RETIREMENT_PERIOD = 19
+
+_HEALTH_FIELDS = [f.name for f in dataclasses.fields(Health)]
+_EDUCATION_FIELDS = [f.name for f in dataclasses.fields(Education)]
 _INTERVAL_LABELS_4 = ["25-34", "35-44", "45-54", "55-64"]
 _INTERVAL_LABELS_6 = [*_INTERVAL_LABELS_4, "65-74", "75-84"]
 _INTERVAL_LABELS_10 = ["25-44", "45-64", "65-84"]
-_HEALTH_LABELS = ["bad", "good"]
-_EDUCATION_LABELS = ["low", "high"]
-
-_ADDITIONAL_TARGETS = [
-    "utility",
-    "effort_cost",
-    "pension",
-    "income",
-    "consumption",
-    "effort_value",
-    "lagged_effort_value",
-]
 
 
 def _build_moment_index():  # noqa: C901
@@ -38,12 +34,12 @@ def _build_moment_index():  # noqa: C901
     """
     idx = [None] * 64
 
-    for health_code, health in enumerate(_HEALTH_LABELS):
+    for health_code, health in enumerate(_HEALTH_FIELDS):
         for i, interval in enumerate(_INTERVAL_LABELS_4):
             idx[i + 4 * (1 - health_code)] = ("working_pct", health, interval)
 
-    for health_code, health in enumerate(_HEALTH_LABELS):
-        for edu_code, edu in enumerate(_EDUCATION_LABELS):
+    for health_code, health in enumerate(_HEALTH_FIELDS):
+        for edu_code, edu in enumerate(_EDUCATION_FIELDS):
             for i, interval in enumerate(_INTERVAL_LABELS_6):
                 idx[i + 6 * (1 - health_code) + edu_code * 12 + 8] = (
                     "avg_effort",
@@ -65,8 +61,8 @@ def _build_moment_index():  # noqa: C901
     idx[44] = ("wealth_gini",)
     idx[45] = ("consumption_ratio",)
 
-    for health_code, health in enumerate(_HEALTH_LABELS):
-        for edu_code, edu in enumerate(_EDUCATION_LABELS):
+    for health_code, health in enumerate(_HEALTH_FIELDS):
+        for edu_code, edu in enumerate(_EDUCATION_FIELDS):
             for i, interval in enumerate(_INTERVAL_LABELS_4):
                 idx[i + 4 * (1 - health_code) + edu_code * 8 + 46] = (
                     "avg_income",
@@ -83,39 +79,51 @@ def _build_moment_index():  # noqa: C901
 
 MOMENT_INDEX = _build_moment_index()
 
+empirical_moments = pd.Series(
+    np.array(
+        [
+            0.6508581, 0.7660204, 0.8232445, 0.6193264,
+            0.5055072, 0.5830671, 0.6008949, 0.4091998,
+            0.6777659, 0.6769325, 0.6802505, 0.6992036, 0.7301746, 0.7237555,
+            0.6426084, 0.6227545, 0.627258, 0.6552106, 0.6968261, 0.6921402,
+            0.7790819, 0.7702285, 0.7660254, 0.7634262, 0.779154, 0.7724553,
+            0.7517721, 0.7435739, 0.736526, 0.7381558, 0.750504, 0.734436,
+            0.0619297, 0.516081, 1.165899, 1.651459, 1.567324, 1.006182,
+            1.237489,
+            0.2672905, 0.3283083, 0.4041793,
+            8.49264942390098, 0.1610319, 0.7456731, 1.163207,
+            35.39329, 49.37886, 55.95501, 42.21932,
+            24.94774, 33.16593, 36.69067, 25.31111,
+            59.48338, 89.53806, 107.9282, 98.27698,
+            50.38816, 66.25301, 78.31755, 63.1325,
+            0.5952184, 0.4770515,
+        ]
+    ),
+    index=MOMENT_INDEX,
+)
 
-def model_solve_and_simulate(params):
-    """Solve and simulate for both discount factor types."""
-    (
-        common_params,
-        initial_conditions_df,
-        discount_types,
-        discount_factor_small,
-        discount_factor_large,
-    ) = create_inputs(seed=32, n_simulation_subjects=10000, params=params)
-
-    dfs = []
-    for discount_factor, type_id in [
-        (discount_factor_small, 0),
-        (discount_factor_large, 1),
-    ]:
-        mask = discount_types == type_id
-        type_df = initial_conditions_df.loc[mask].reset_index(drop=True)
-        type_initial = initial_conditions_from_dataframe(df=type_df, model=model)
-
-        result = model.simulate(
-            params={"alive": {"discount_factor": discount_factor, **common_params}},
-            initial_conditions=type_initial,
-            period_to_regime_to_V_arr=None,
-            seed=42,
-            log_level="off",
-        )
-        df = result.to_dataframe(additional_targets=_ADDITIONAL_TARGETS)
-        df["discount_type"] = type_id
-        dfs.append(df)
-
-    res = pd.concat(dfs, ignore_index=True)
-    return res.loc[res["regime"] == "alive"].copy()
+moment_sd = pd.Series(
+    np.array(
+        [
+            0.0022079, 0.001673, 0.0015903, 0.0024375,
+            0.0078668, 0.0054486, 0.0045718, 0.0045788,
+            0.0019615, 0.0016137, 0.0016517, 0.0018318, 0.0016836, 0.0022494,
+            0.0066662, 0.0047753, 0.0035851, 0.0031197, 0.0027306, 0.0025937,
+            0.0024741, 0.0019636, 0.0019423, 0.0022411, 0.0024561, 0.0037815,
+            0.0107689, 0.0082543, 0.0063126, 0.0051546, 0.0050761, 0.0057938,
+            0.0031501, 0.0146831, 0.023547, 0.037393, 0.042682, 0.0473329,
+            0.0029621,
+            0.0037247, 0.0030799, 0.0039969,
+            0.594830904063775, 0.0004399, 0.0035907, 0.0221391,
+            0.1955369, 0.2318309, 0.2660378, 0.3528976,
+            0.5630693, 0.5187444, 0.4988166, 0.4986972,
+            0.4875483, 0.631705, 0.7607303, 1.108492,
+            1.848723, 1.65571, 1.688008, 1.78551,
+            0.0023382, 0.0015815,
+        ]
+    ),
+    index=MOMENT_INDEX,
+)
 
 
 def _assign_intervals(res):
@@ -159,7 +167,7 @@ def simulate_moments(params):
         moments,
         working,
         "working_pct",
-        [(h, i) for h in _HEALTH_LABELS for i in _INTERVAL_LABELS_4],
+        [(h, i) for h in _HEALTH_FIELDS for i in _INTERVAL_LABELS_4],
     )
 
     # Avg effort by (education, health, 6 intervals)
@@ -172,23 +180,23 @@ def simulate_moments(params):
         "avg_effort",
         [
             (e, h, i)
-            for e in _EDUCATION_LABELS
-            for h in _HEALTH_LABELS
+            for e in _EDUCATION_FIELDS
+            for h in _HEALTH_FIELDS
             for i in _INTERVAL_LABELS_6
         ],
     )
 
     # Avg income by (education, health, 4 intervals), scaled
     avg_income = res.groupby(["education", "health", "interval_4"])["income"].mean()
-    avg_income = avg_income * _WEALTH_NORMALIZATION / 1000
+    avg_income = avg_income * _wealth_normalization[1] / 1000
     _fill_grouped_moments(
         moments,
         avg_income,
         "avg_income",
         [
             (e, h, i)
-            for e in _EDUCATION_LABELS
-            for h in _HEALTH_LABELS
+            for e in _EDUCATION_FIELDS
+            for h in _HEALTH_FIELDS
             for i in _INTERVAL_LABELS_4
         ],
     )
@@ -225,7 +233,7 @@ def simulate_moments(params):
         cons_by_health.loc["good"] / cons_by_health.loc["bad"]
     )
 
-    working_mask = (res["period"] <= _RETIREMENT_PERIOD) & (
+    working_mask = (res["period"] < retirement_period) & (
         res["labor_supply"] != "retired"
     )
     log_earnings = np.log(
@@ -233,33 +241,9 @@ def simulate_moments(params):
     )
     moments[str(("log_earnings_var",))] = log_earnings.var()
 
-    pension_avg = res.loc[res["period"] == _RETIREMENT_PERIOD + 1, "pension"].mean()
-    avg_income_pre_ret = res.loc[
-        res["period"] < _RETIREMENT_PERIOD + 1, "income"
-    ].mean()
+    pension_avg = res.loc[res["period"] == retirement_period, "pension"].mean()
+    avg_income_pre_ret = res.loc[res["period"] < retirement_period, "income"].mean()
     moments[str(("pension_income_ratio",))] = pension_avg / avg_income_pre_ret
 
     print(moments.values)
-    return moments
-
-
-def simulate_wealth(params):
-    """Compute wealth moments by health status."""
-    res = model_solve_and_simulate(params)
-    res = _assign_intervals(res)
-    intervals = _INTERVAL_LABELS_6[1:]  # skip first interval (ages 25-34)
-    moments = pd.Series(
-        0.0,
-        index=[
-            f"median_wealth_{health}_{interval}"
-            for health in _HEALTH_LABELS
-            for interval in intervals
-        ],
-    )
-    median_wealth = res.groupby(["health", "interval_5"])["wealth"].median()
-    for health in _HEALTH_LABELS:
-        for interval in intervals:
-            moments[f"median_wealth_{health}_{interval}"] = median_wealth.loc[
-                health, interval
-            ]
     return moments

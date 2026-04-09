@@ -163,8 +163,14 @@ lower_bounds = {
     },
     "education_disutility_adj": 0.0,
     "effort_cost": {
-        "low": {"bad": dict.fromkeys(_ec_ages, 0.0), "good": dict.fromkeys(_ec_ages, 0.0)},
-        "high": {"bad": dict.fromkeys(_ec_ages, 0.0), "good": dict.fromkeys(_ec_ages, 0.0)},
+        "low": {
+            "bad": dict.fromkeys(_ec_ages, 0.0),
+            "good": dict.fromkeys(_ec_ages, 0.0),
+        },
+        "high": {
+            "bad": dict.fromkeys(_ec_ages, 0.0),
+            "good": dict.fromkeys(_ec_ages, 0.0),
+        },
     },
     "income_process": {
         "y1": pd.Series({"low": 0.0, "high": 0.0}),
@@ -188,8 +194,14 @@ upper_bounds = {
     },
     "education_disutility_adj": 1.5,
     "effort_cost": {
-        "low": {"bad": dict.fromkeys(_ec_ages, 3.0), "good": dict.fromkeys(_ec_ages, 3.0)},
-        "high": {"bad": dict.fromkeys(_ec_ages, 3.0), "good": dict.fromkeys(_ec_ages, 3.0)},
+        "low": {
+            "bad": dict.fromkeys(_ec_ages, 3.0),
+            "good": dict.fromkeys(_ec_ages, 3.0),
+        },
+        "high": {
+            "bad": dict.fromkeys(_ec_ages, 3.0),
+            "good": dict.fromkeys(_ec_ages, 3.0),
+        },
     },
     "income_process": {
         "y1": pd.Series({"low": 2.0, "high": 2.0}),

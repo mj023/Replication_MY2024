@@ -5191,8 +5191,8 @@ packages:
   timestamp: 1760379115194
 - pypi: ./
   name: replication-my
-  version: 0.1.dev57+gd4cce58fd.d20260409
-  sha256: f48ebae6d06b0fb8f0dc715084fde8d0a8c115807b7ff1020ea313d60f0c3c8a
+  version: 0.1.dev61+g6f7234134.d20260409
+  sha256: 68a6edf3146f8744dbbe1699e33837a1b407ba19e677b526adf2caa1fd4ea423
   requires_dist:
   - dags
   - networkx

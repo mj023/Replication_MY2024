@@ -62,7 +62,7 @@ def create_effort_cost_grid(effort_cost):
     grid = jnp.zeros((n_periods, 2, 2))
     for i, edu in enumerate(["low", "high"]):
         for j, health in enumerate(["bad", "good"]):
-            knots = np.asarray(effort_cost[(edu, health)])
+            knots = np.asarray(effort_cost[f"{edu}_{health}"])
             spline = scipy_interp1d(np.asarray(effort_cost.index), knots, kind="cubic")
             interp_points = np.arange(1, 31)
             temp_grid = jnp.asarray(spline(interp_points))

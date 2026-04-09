@@ -133,6 +133,14 @@ seaborn = ">=0.13.2,<0.14"
 statsmodels = ">=0.14.2,<0.15"
 [tool.pixi.environments]
 tests = { features = [ "tests" ], solve-group = "default" }
+tests-cuda13 = { features = [ "tests", "cuda13" ], solve-group = "cuda13" }
+[tool.pixi.feature.cuda13]
+platforms = [ "linux-64" ]
+system-requirements = { cuda = "13" }
+[tool.pixi.feature.cuda13.target.linux-64.dependencies]
+cuda-nvcc = "~=13.0"
+[tool.pixi.feature.cuda13.target.linux-64.pypi-dependencies]
+jax = { version = ">=0.4.34", extras = [ "cuda13" ] }
 [tool.pixi.feature.tests.pypi-dependencies]
 pytest = "*"
 pytest-cov = "*"

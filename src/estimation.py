@@ -160,12 +160,7 @@ lower_bounds = {
     ),
     "education_disutility_adj": 0.0,
     "effort_cost": pd.DataFrame(
-        {
-            ("low", "bad"): [0.0] * 4,
-            ("low", "good"): [0.0] * 4,
-            ("high", "bad"): [0.0] * 4,
-            ("high", "good"): [0.0] * 4,
-        },
+        {"low_bad": [0.0] * 4, "low_good": [0.0] * 4, "high_bad": [0.0] * 4, "high_good": [0.0] * 4},
         index=[1, 12, 20, 31],
     ),
     "income_process": {
@@ -190,12 +185,7 @@ upper_bounds = {
     ),
     "education_disutility_adj": 1.5,
     "effort_cost": pd.DataFrame(
-        {
-            ("low", "bad"): [3.0] * 4,
-            ("low", "good"): [3.0] * 4,
-            ("high", "bad"): [3.0] * 4,
-            ("high", "good"): [3.0] * 4,
-        },
+        {"low_bad": [3.0] * 4, "low_good": [3.0] * 4, "high_bad": [3.0] * 4, "high_good": [3.0] * 4},
         index=[1, 12, 20, 31],
     ),
     "income_process": {

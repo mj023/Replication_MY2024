@@ -4,10 +4,12 @@ from dataclasses import make_dataclass
 from functools import partial
 from pathlib import Path
 
+import jax
 import jax.numpy as jnp
 import lcm
 import numpy as np
 import pandas as pd
+from jax import random
 from lcm import (
     AgeGrid,
     DiscreteGrid,
@@ -26,6 +28,8 @@ from lcm.typing import (
     FloatND,
     Period,
 )
+from lcm.utils.dispatchers import productmap
+from scipy.interpolate import interp1d as scipy_interp1d
 
 _DATA_DIR = Path(__file__).parent
 
@@ -499,3 +503,219 @@ START_PARAMS = {
     "health_consumption_penalty": 0.871503495423925,
     "pension_replacement_rate": 0.358766004066242,
 }
+
+
+# ---------------------------------------------------------------------------
+# Grid creation and initial conditions
+# ---------------------------------------------------------------------------
+
+
+def _age_keys_to_periods(age_keyed_dict):
+    """Convert {"27": val, "41": val, ...} to period-indexed arrays.
+
+    The grid creation functions use period indexing for the interpolation knots.
+
+    """
+    start_age = int(ages.values[0])
+    step = int(ages.values[1] - ages.values[0])
+    knot_ages = np.array([int(k) for k in age_keyed_dict])
+    knot_periods = (knot_ages - start_age) // step
+    values = np.array(list(age_keyed_dict.values()))
+    return knot_periods, values
+
+
+def create_work_disutility_grid(work_disutility, education_disutility_adjustment):
+    """Interpolate work disutility knots to full period grid.
+
+    Args:
+        work_disutility: Dict {"bad": {"27": v, ...}, "good": {"27": v, ...}}.
+        education_disutility_adjustment: Scalar education adjustment factor.
+
+    """
+    grid = jnp.zeros((retirement_period + 1, 2, 2))
+    for j, health in enumerate(["bad", "good"]):
+        knot_periods, knot_values = _age_keys_to_periods(work_disutility[health])
+        spline = scipy_interp1d(knot_periods, knot_values, kind="cubic")
+        interp_points = jnp.arange(1, retirement_period + 2)
+        temp_grid = jnp.asarray(spline(interp_points))
+        grid = grid.at[:, 0, j].set(
+            temp_grid * jnp.exp(education_disutility_adjustment)
+        )
+        grid = grid.at[:, 1, j].set(temp_grid)
+    return grid
+
+
+def create_effort_cost_grid(effort_cost):
+    """Interpolate effort cost knots to full period grid.
+
+    Args:
+        effort_cost: Nested dict
+            {"low": {"bad": {"27": v, ...}, ...}, "high": {...}}.
+
+    """
+    grid = jnp.zeros((n_periods, 2, 2))
+    for i, edu in enumerate(["low", "high"]):
+        for j, health in enumerate(["bad", "good"]):
+            knot_periods, knot_values = _age_keys_to_periods(effort_cost[edu][health])
+            spline = scipy_interp1d(knot_periods, knot_values, kind="cubic")
+            interp_points = np.arange(1, 31)
+            temp_grid = jnp.asarray(spline(interp_points))
+            grid = grid.at[0:30, i, j].set(temp_grid)
+            grid = grid.at[30:n_periods, i, j].set(knot_values[-1])
+    return grid
+
+
+def create_adjustment_cost_envelope(adjustment_cost):
+    """Build exponential adjustment cost envelope over periods."""
+    t = jnp.arange(n_periods)
+    return jnp.maximum(adjustment_cost[0] * jnp.exp(adjustment_cost[1] * t), 0)
+
+
+def create_base_income_grid(income_process):
+    """Build base income grid from income process parameters."""
+    sigx = income_process["sigx"]
+    sdztemp = ((sigx**2.0) / (1.0 - shock_persistence**2.0)) ** 0.5
+    j = jnp.arange(20)
+    health = jnp.arange(2)
+    education = jnp.arange(2)
+
+    y1 = income_process["y1"]
+    yt_s = income_process["yt_s"]
+    yt_sq = income_process["yt_sq"]
+    wagep = income_process["wagep"]
+
+    def calc_base(_period, health, education):
+        yt = jnp.where(
+            education == 1,
+            (
+                y1["high"]
+                * jnp.exp(yt_s["high"] * _period + yt_sq["high"] * _period**2.0)
+            )
+            * (1.0 - wagep["high"] * (1 - health)),
+            (y1["low"] * jnp.exp(yt_s["low"] * _period + yt_sq["low"] * _period**2.0))
+            * (1.0 - wagep["low"] * (1 - health)),
+        )
+        return yt / (
+            jnp.exp(((jnp.log(productivity_type_multiplier[1]) ** 2.0) ** 2.0) / 2.0)
+            * jnp.exp(((sdztemp**2.0) ** 2.0) / 2.0)
+        )
+
+    variables = ("_period", "health", "education")
+    mapped = productmap(
+        func=calc_base, variables=variables, batch_sizes=dict.fromkeys(variables, 0)
+    )
+    return mapped(_period=j, health=health, education=education)
+
+
+# Initial type distribution arrays
+_discount = jnp.zeros((16), dtype=jnp.int8)
+_prod = jnp.zeros((16), dtype=jnp.int8)
+_ht = jnp.zeros((16), dtype=jnp.int8)
+_ed = jnp.zeros((16), dtype=jnp.int8)
+for _i in range(1, 3):
+    for _j in range(1, 3):
+        for _k in range(1, 3):
+            _index = (_i - 1) * 2 * 2 + (_j - 1) * 2 + _k - 1
+            _discount = _discount.at[_index].set(_i - 1)
+            _prod = _prod.at[_index].set(_j - 1)
+            _ht = _ht.at[_index].set(1 - (_k - 1))
+            _discount = _discount.at[_index + 8].set(_i - 1)
+            _prod = _prod.at[_index + 8].set(_j - 1)
+            _ht = _ht.at[_index + 8].set(1 - (_k - 1))
+            _ed = _ed.at[_index + 8].set(1)
+_init_distr = jnp.array(np.loadtxt(_DATA_DIR / "init_distr_2b2t2h.txt"))
+_initial_dists = jnp.diff(_init_distr[:, 0], prepend=0)
+
+_HEALTH_LABELS = {0: "bad", 1: "good"}
+_EDUCATION_LABELS = {0: "low", 1: "high"}
+_PRODUCTIVITY_LABELS = {0: "low", 1: "high"}
+_HEALTH_TYPE_LABELS = {0: "low", 1: "high"}
+_EFFORT_LABELS = {i: f"class{i}" for i in range(40)}
+
+
+def create_inputs(seed, n_simulation_subjects, params):
+    """Build model params and initial conditions from structured parameters."""
+    base_income = create_base_income_grid(params["income_process"])
+    cost_envelope = create_adjustment_cost_envelope(params["adjustment_cost"])
+    xvalues = prod_shock_grid.get_gridpoints()
+    xtrans = prod_shock_grid.get_transition_probs()
+    ec_grid = create_effort_cost_grid(params["effort_cost"])
+    wd_grid = create_work_disutility_grid(
+        params["work_disutility"], params["education_disutility_adjustment"]
+    )
+
+    model_params = {
+        "work_disutility": {"work_disutility_grid": wd_grid},
+        "effort_cost": {
+            "effort_elasticity": params["effort_elasticity"],
+            "effort_cost_grid": ec_grid,
+        },
+        "consumption_utility": {
+            "utility_constant": params["utility_constant"],
+            "health_consumption_penalty": params["health_consumption_penalty"],
+        },
+        "income": {"base_income_grid": base_income},
+        "pension": {
+            "base_income_grid": base_income,
+            "pension_replacement_rate": params["pension_replacement_rate"],
+        },
+        "adjustment_cost_penalty": {"adjustment_cost_envelope": cost_envelope},
+        "scaled_productivity_shock": {
+            "productivity_shock_scale": jnp.sqrt(params["income_process"]["sigx"])
+        },
+    }
+
+    n = n_simulation_subjects
+    key = random.key(seed)
+    types = random.choice(key, jnp.arange(16), (n,), p=_initial_dists)
+    new_keys = random.split(key=key, num=3)
+    health_draw = random.uniform(new_keys[0], (n,))
+    health_thresholds = _init_distr[:, 1][types]
+    initial_health = jnp.where(health_draw > health_thresholds, 0, 1)
+    initial_health_type = 1 - _ht[types]
+    initial_education = _ed[types]
+    initial_productivity = _prod[types]
+    initial_discount = _discount[types]
+    initial_effort = jnp.searchsorted(effort_grid, _init_distr[:, 2][types])
+    prod_dist = jax.lax.fori_loop(
+        0,
+        1000000,
+        lambda _i, a: a @ xtrans.T,
+        jnp.full(5, 1 / 5),
+    )
+    initial_adjustment_cost = np.asarray(random.uniform(new_keys[1], (n,)))
+    initial_productivity_shock = np.asarray(
+        xvalues[random.choice(new_keys[2], jnp.arange(5), (n,), p=prod_dist)]
+    )
+
+    initial_conditions_df = pd.DataFrame(
+        {
+            "regime": "alive",
+            "age": ages.values[0],
+            "wealth": np.zeros(n),
+            "health": pd.Categorical(
+                [_HEALTH_LABELS[int(v)] for v in initial_health],
+                categories=["bad", "good"],
+            ),
+            "lagged_effort": pd.Categorical(
+                [_EFFORT_LABELS[int(v)] for v in initial_effort],
+                categories=[f"class{i}" for i in range(40)],
+            ),
+            "education": pd.Categorical(
+                [_EDUCATION_LABELS[int(v)] for v in initial_education],
+                categories=["low", "high"],
+            ),
+            "productivity": pd.Categorical(
+                [_PRODUCTIVITY_LABELS[int(v)] for v in initial_productivity],
+                categories=["low", "high"],
+            ),
+            "health_type": pd.Categorical(
+                [_HEALTH_TYPE_LABELS[int(v)] for v in initial_health_type],
+                categories=["low", "high"],
+            ),
+            "productivity_shock": initial_productivity_shock,
+            "adjustment_cost": initial_adjustment_cost,
+        }
+    )
+
+    return model_params, initial_conditions_df, np.asarray(initial_discount)

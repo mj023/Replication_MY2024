@@ -602,12 +602,11 @@ def create_adjustment_cost_envelope(adjustment_cost):
     return pd.Series(values, index=pd.Index(age_values, name="age"))
 
 
-_DISCOUNT_LABELS = ["small", "large"]
-
-
-def _field_name(categorical_class, code):
-    """Get the field name for an integer code from a @categorical class."""
-    return dataclasses.fields(categorical_class)[code].name
+_DISCOUNT_LABELS = ("small", "large")
+_EDUCATION_FIELDS = tuple(f.name for f in dataclasses.fields(Education))
+_PRODUCTIVITY_FIELDS = tuple(f.name for f in dataclasses.fields(ProductivityType))
+_HEALTH_TYPE_FIELDS = tuple(f.name for f in dataclasses.fields(HealthType))
+_EFFORT_FIELD_NAMES = np.array([f.name for f in dataclasses.fields(Effort)])
 
 
 def _build_type_distribution():
@@ -632,9 +631,9 @@ def _build_type_distribution():
                 "health_threshold": float(raw[idx, 1]),
                 "initial_effort": float(raw[idx, 2]),
                 "discount_type": _DISCOUNT_LABELS[discount_code],
-                "education": _field_name(Education, edu_code),
-                "productivity": _field_name(ProductivityType, prod_code),
-                "health_type": _field_name(HealthType, health_type_code),
+                "education": _EDUCATION_FIELDS[edu_code],
+                "productivity": _PRODUCTIVITY_FIELDS[prod_code],
+                "health_type": _HEALTH_TYPE_FIELDS[health_type_code],
             }
         )
     return pd.DataFrame(records)
@@ -742,11 +741,9 @@ def create_inputs(seed, n_simulation_subjects, params):
     keys = random.split(key=key, num=3)
     health_draw = random.uniform(keys[0], (n_simulation_subjects,))
     health_thresholds = td["health_threshold"].values[type_indices]
-    initial_health_codes = np.where(health_draw > health_thresholds, 0, 1)
 
-    initial_effort_values = td["initial_effort"].values[type_indices]
-    initial_effort_codes = np.searchsorted(
-        np.asarray(effort_grid), initial_effort_values
+    effort_codes = np.searchsorted(
+        np.asarray(effort_grid), td["initial_effort"].values[type_indices]
     )
 
     shock_gridpoints = prod_shock_grid.get_gridpoints()
@@ -762,21 +759,11 @@ def create_inputs(seed, n_simulation_subjects, params):
             "regime": "alive",
             "age": ages.values[0],
             "wealth": np.zeros(n_simulation_subjects),
-            "health": pd.Categorical(
-                [_field_name(Health, c) for c in initial_health_codes],
-            ).astype(Health.to_categorical_dtype()),  # ty: ignore[unresolved-attribute],
-            "lagged_effort": pd.Categorical(
-                [_field_name(Effort, c) for c in initial_effort_codes],
-            ).astype(Effort.to_categorical_dtype()),  # ty: ignore[unresolved-attribute],
-            "education": pd.Categorical(
-                td["education"].values[type_indices],
-            ).astype(Education.to_categorical_dtype()),  # ty: ignore[unresolved-attribute],
-            "productivity": pd.Categorical(
-                td["productivity"].values[type_indices],
-            ).astype(ProductivityType.to_categorical_dtype()),  # ty: ignore[unresolved-attribute],
-            "health_type": pd.Categorical(
-                td["health_type"].values[type_indices],
-            ).astype(HealthType.to_categorical_dtype()),  # ty: ignore[unresolved-attribute],
+            "health": np.where(health_draw > health_thresholds, "bad", "good"),
+            "lagged_effort": _EFFORT_FIELD_NAMES[effort_codes],
+            "education": td["education"].values[type_indices],
+            "productivity": td["productivity"].values[type_indices],
+            "health_type": td["health_type"].values[type_indices],
             "productivity_shock": np.asarray(
                 shock_gridpoints[
                     random.choice(

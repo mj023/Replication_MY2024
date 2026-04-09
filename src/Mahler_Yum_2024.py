@@ -26,7 +26,6 @@ from lcm.typing import (
     FloatND,
     Period,
 )
-from lcm.params import MappingLeaf
 from lcm.utils.dispatchers import productmap
 
 _DATA_DIR = Path(__file__).parent
@@ -446,7 +445,7 @@ START_PARAMS = {
     ),
     "education_disutility_adj": 0.807247922589072,
     # Effort cost knot values at periods [1, 12, 20, 31]
-    "effort_cost": MappingLeaf({
+    "effort_cost": {
         "low": {
             "bad": [0.628031290227532, 1.36593242946612, 1.64963812690034, 0.734873142494319],
             "good": [0.146075197675677, 0.55992411008533, 1.04795036000287, 1.60294886005945],
@@ -455,7 +454,7 @@ START_PARAMS = {
             "bad": [0.46921037985024, 0.996665589702672, 1.65388250352532, 1.08866246911941],
             "good": [0.091312997289004, 0.302477689083851, 0.739843441095022, 1.36582077051777],
         },
-    }),
+    },
     "income_process": {
         "y1": pd.Series({"low": 0.899399488241831, "high": 1.1654726432446}),
         "yt_s": pd.Series({"low": 0.0615804210614531, "high": 0.0874283672769353}),

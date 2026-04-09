@@ -3,7 +3,6 @@ import time
 import numpy as np
 import optimagic as om
 import pandas as pd
-from lcm.params import MappingLeaf
 
 from Mahler_Yum_2024 import START_PARAMS
 from model_function import simulate_moments
@@ -160,10 +159,10 @@ lower_bounds = {
         index=[1, 8, 13, 20],
     ),
     "education_disutility_adj": 0.0,
-    "effort_cost": MappingLeaf({
+    "effort_cost": {
         "low": {"bad": [0.0] * 4, "good": [0.0] * 4},
         "high": {"bad": [0.0] * 4, "good": [0.0] * 4},
-    }),
+    },
     "income_process": {
         "y1": pd.Series({"low": 0.0, "high": 0.0}),
         "yt_s": pd.Series({"low": 0.0, "high": 0.0}),
@@ -185,10 +184,10 @@ upper_bounds = {
         index=[1, 8, 13, 20],
     ),
     "education_disutility_adj": 1.5,
-    "effort_cost": MappingLeaf({
+    "effort_cost": {
         "low": {"bad": [3.0] * 4, "good": [3.0] * 4},
         "high": {"bad": [3.0] * 4, "good": [3.0] * 4},
-    }),
+    },
     "income_process": {
         "y1": pd.Series({"low": 2.0, "high": 2.0}),
         "yt_s": pd.Series({"low": 0.3, "high": 0.3}),

@@ -55,7 +55,7 @@ def create_effort_cost_grid(effort_cost):
     """Interpolate effort cost knots to full period grid.
 
     Args:
-        effort_cost: MappingLeaf with nested dict
+        effort_cost: Nested dict
             {"low": {"bad": [...], "good": [...]}, "high": {...}}.
 
     """
@@ -63,7 +63,7 @@ def create_effort_cost_grid(effort_cost):
     grid = jnp.zeros((n_periods, 2, 2))
     for i, edu in enumerate(["low", "high"]):
         for j, health in enumerate(["bad", "good"]):
-            knots = np.asarray(effort_cost.data[edu][health])
+            knots = np.asarray(effort_cost[edu][health])
             spline = scipy_interp1d(knot_periods, knots, kind="cubic")
             interp_points = np.arange(1, 31)
             temp_grid = jnp.asarray(spline(interp_points))

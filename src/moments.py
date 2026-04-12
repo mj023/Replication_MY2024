@@ -236,16 +236,19 @@ def _assign_intervals(*, res):
         res["period"],
         bins=[-1, 5, 10, 15, 20, 25, 30],
         labels=_INTERVAL_LABELS_6,
+        right=False,
     )
     res["interval_4"] = pd.cut(
         res["period"],
         bins=[-1, 5, 10, 15, 20],
         labels=_INTERVAL_LABELS_4,
+        right=False,
     )
     res["interval_10"] = pd.cut(
         res["period"],
         bins=[-1, 10, 20, 30],
         labels=_INTERVAL_LABELS_10,
+        right=False,
     )
     return res
 

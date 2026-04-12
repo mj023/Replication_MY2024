@@ -144,6 +144,7 @@ def simulate_wealth(*, params):
         res["period"],
         bins=[-1, 5, 10, 15, 20, 25, 30],
         labels=["25-34", *_INTERVAL_LABELS],
+        right=False,
     )
     median_wealth = res.groupby(["health", "interval_5"])["wealth"].median()
     return pd.Series(
@@ -165,7 +166,7 @@ fig = go.Figure()
 trace3 = go.Scatter(
     x=["35-44", "45-54", "55-64", "65-74", "75-84"],
     y=(wealth[0:5] * WEALTH_NORMALIZATION) / 1000,
-    name="Healthy",
+    name="Unhealthy",
     mode="lines+markers",
     marker={"size": 6},
     legendgroup="Model",
@@ -175,7 +176,7 @@ fig.add_trace(trace3)
 trace4 = go.Scatter(
     x=["35-44", "45-54", "55-64", "65-74", "75-84"],
     y=(wealth[5:] * WEALTH_NORMALIZATION) / 1000,
-    name="Unhealthy",
+    name="Healthy",
     mode="lines+markers",
     marker={"size": 6},
     legendgrouptitle_text="Model",
@@ -227,8 +228,8 @@ fig.write_image(
 fig = go.Figure()
 trace3 = go.Scatter(
     x=["35-44", "45-54", "55-64", "65-74", "75-84"],
-    y=((wealth[0:5] * WEALTH_NORMALIZATION) / 1000)
-    / ((wealth[5:] * WEALTH_NORMALIZATION) / 1000),
+    y=((wealth[5:] * WEALTH_NORMALIZATION) / 1000)
+    / ((wealth[0:5] * WEALTH_NORMALIZATION) / 1000),
     name="Model",
     mode="lines+markers",
     marker={"size": 6},

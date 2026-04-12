@@ -23,7 +23,9 @@ def test_model_solves_and_simulates():
         seed=0, n_simulation_subjects=4, params=START_PARAMS
     )
     initial_conditions = initial_conditions_from_dataframe(
-        df=ic_df, model=MAHLER_YUM_MODEL
+        df=ic_df,
+        regimes=MAHLER_YUM_MODEL.regimes,
+        regime_names_to_ids=MAHLER_YUM_MODEL.regime_names_to_ids,
     )
     result = MAHLER_YUM_MODEL.simulate(
         params={"alive": {"discount_factor": discount_factor_small, **common_params}},
@@ -89,7 +91,9 @@ def test_period_0_policy_matches_old_pylcm():
         mask = discount_factor_type == type_id
         type_df = old_ic_df.loc[mask].reset_index(drop=True)
         type_initial = initial_conditions_from_dataframe(
-            df=type_df, model=MAHLER_YUM_MODEL
+            df=type_df,
+            regimes=MAHLER_YUM_MODEL.regimes,
+            regime_names_to_ids=MAHLER_YUM_MODEL.regime_names_to_ids,
         )
 
         result = MAHLER_YUM_MODEL.simulate(

@@ -529,11 +529,6 @@ START_PARAMS = {
 }
 
 
-# ---------------------------------------------------------------------------
-# Grid creation and initial conditions
-# ---------------------------------------------------------------------------
-
-
 def _age_keys_to_periods(*, age_keyed_dict):
     """Convert {"27": val, "41": val, ...} to period-indexed arrays."""
     start_age = int(ages.values[0])
@@ -830,7 +825,9 @@ def model_solve_and_simulate(*, params):
         mask = discount_types == type_id
         type_df = initial_conditions_df.loc[mask].reset_index(drop=True)
         type_initial = initial_conditions_from_dataframe(
-            df=type_df, model=MAHLER_YUM_MODEL
+            df=type_df,
+            regimes=MAHLER_YUM_MODEL.regimes,
+            regime_names_to_ids=MAHLER_YUM_MODEL.regime_names_to_ids,
         )
 
         result = MAHLER_YUM_MODEL.simulate(

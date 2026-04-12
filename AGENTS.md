@@ -18,7 +18,7 @@ discount factors.
 ## Architecture
 
 - `src/Mahler_Yum_2024.py` — model definition (regimes, functions, grids)
-- `src/model_function.py` — solve, simulate, compute moments
+- `src/moments.py` — moment specification and computation for MSM
 - `src/estimation.py` — MSM estimation via optimagic
 - `src/test_run_model.py` — regression tests
 - `regression_data/` — reference data for regression tests

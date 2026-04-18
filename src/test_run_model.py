@@ -29,12 +29,12 @@ def _make_initial_conditions(*, df):
 
 def test_model_solves_and_simulates():
     """Smoke test: model runs end-to-end with small n."""
-    common_params, ic_df, _, discount_factor_small, _ = create_inputs(
+    common_params, ic_df = create_inputs(
         seed=0, n_simulation_subjects=4, params=START_PARAMS
     )
     initial_conditions = _make_initial_conditions(df=ic_df)
     result = MAHLER_YUM_MODEL.simulate(
-        params={"alive": {"discount_factor": discount_factor_small, **common_params}},
+        params={"alive": common_params},
         initial_conditions=initial_conditions,
         period_to_regime_to_V_arr=None,
         seed=12345,
@@ -77,8 +77,8 @@ def test_period_0_policy_matches_old_pylcm():
     old_prodshock = np.load(_REGRESSION_DIR / "old_initial_prodshock.npy")
     old_adjcost = np.load(_REGRESSION_DIR / "old_initial_adjcost.npy")
 
-    common_params, new_ic_df, _, discount_factor_small, discount_factor_large = (
-        create_inputs(seed=32, n_simulation_subjects=10000, params=START_PARAMS)
+    common_params, new_ic_df = create_inputs(
+        seed=32, n_simulation_subjects=10000, params=START_PARAMS
     )
 
     xvalues = prod_shock_grid.get_gridpoints()
@@ -94,34 +94,23 @@ def test_period_0_policy_matches_old_pylcm():
             "education": new_ic_df["education"],
             "productivity": new_ic_df["productivity"],
             "health_type": new_ic_df["health_type"],
+            "discount_type": np.where(old_discount == 0, "small", "large"),
             "productivity_shock": np.asarray(xvalues[old_prodshock]),
             "adjustment_cost": uniform_gridpoints[old_adjcost],
         }
     )
 
-    discount_factor_type = old_discount
-
-    all_labor_supply = []
-    for discount_factor, type_id in [
-        (discount_factor_small, 0),
-        (discount_factor_large, 1),
-    ]:
-        mask = discount_factor_type == type_id
-        type_df = old_ic_df.loc[mask].reset_index(drop=True)
-        type_initial = _make_initial_conditions(df=type_df)
-
-        result = MAHLER_YUM_MODEL.simulate(
-            params={"alive": {"discount_factor": discount_factor, **common_params}},
-            initial_conditions=type_initial,
-            period_to_regime_to_V_arr=None,
-            seed=42,
-            log_level="off",
-        )
-        df = result.to_dataframe(use_labels=False)
-        p0 = df[(df["regime"] == "alive") & (df["period"] == 0)]
-        all_labor_supply.append(p0["labor_supply"].values)
-
-    labor_supply = np.concatenate(all_labor_supply)
+    initial_conditions = _make_initial_conditions(df=old_ic_df)
+    result = MAHLER_YUM_MODEL.simulate(
+        params={"alive": common_params},
+        initial_conditions=initial_conditions,
+        period_to_regime_to_V_arr=None,
+        seed=42,
+        log_level="off",
+    )
+    df = result.to_dataframe(use_labels=False)
+    p0 = df[(df["regime"] == "alive") & (df["period"] == 0)]
+    labor_supply = p0["labor_supply"].values
 
     # Period-0 labor supply distribution must approximately match old pylcm 167a3a6.
     # Small deviations (1-2 agents) are expected from IrregSpacedGrid float precision.
@@ -141,10 +130,10 @@ _LABOR_MAP = {"retired": 0.0, "part_time": 1.0, "full_time": 2.0}
     ("period", "expected_retired", "expected_part_time", "expected_full_time"),
     [
         (0, 177, 6283, 3540),
-        (1, 435, 7182, 2376),
-        (2, 382, 6993, 2614),
-        (3, 323, 6495, 3160),
-        (4, 270, 6324, 3374),
+        (1, 424, 7219, 2350),
+        (2, 382, 6988, 2616),
+        (3, 303, 6545, 3131),
+        (4, 248, 6291, 3432),
     ],
 )
 def test_labor_supply_distribution(
@@ -169,12 +158,12 @@ def test_labor_supply_distribution(
     ("period", "expected_mean_wealth"),
     [
         (0, 0.0),
-        (5, 0.3906),
-        (10, 1.2593),
-        (15, 2.5898),
-        (20, 3.0429),
-        (25, 2.0246),
-        (30, 0.9496),
+        (5, 0.3885),
+        (10, 1.2459),
+        (15, 2.5476),
+        (20, 2.9681),
+        (25, 1.9695),
+        (30, 0.9009),
     ],
 )
 def test_mean_wealth_profile(simulation_result, period, expected_mean_wealth):
@@ -190,9 +179,9 @@ def test_mean_wealth_profile(simulation_result, period, expected_mean_wealth):
     ("period", "expected_good_frac"),
     [
         (0, 0.928),
-        (10, 0.9094),
-        (20, 0.8327),
-        (30, 0.6723),
+        (10, 0.9078),
+        (20, 0.8328),
+        (30, 0.6746),
     ],
 )
 def test_health_good_fraction(simulation_result, period, expected_good_frac):
@@ -209,10 +198,10 @@ def test_health_good_fraction(simulation_result, period, expected_good_frac):
 @pytest.mark.parametrize(
     ("period", "expected_alive"),
     [
-        (10, 9877),
-        (20, 9151),
-        (30, 4959),
-        (37, 450),
+        (10, 9873),
+        (20, 9129),
+        (30, 4927),
+        (37, 467),
     ],
 )
 def test_survival_counts(simulation_result, period, expected_alive):
@@ -227,10 +216,10 @@ def test_survival_counts(simulation_result, period, expected_alive):
 def test_effort_statistics(simulation_result):
     """Mean and std of effort_value across all periods must match reference."""
     np.testing.assert_allclose(
-        simulation_result["effort_value"].mean(), 0.8514, atol=0.005
+        simulation_result["effort_value"].mean(), 0.8523, atol=0.005
     )
     np.testing.assert_allclose(
-        simulation_result["effort_value"].std(), 0.1860, atol=0.005
+        simulation_result["effort_value"].std(), 0.1848, atol=0.005
     )
 
 
@@ -240,8 +229,8 @@ def test_effort_statistics(simulation_result):
 def test_consumption_by_health(simulation_result):
     """Consumption must be higher for good health than bad health."""
     cons = simulation_result.groupby("health")["consumption"].mean()
-    np.testing.assert_allclose(cons.loc["good"], 0.8623, atol=0.005)
-    np.testing.assert_allclose(cons.loc["bad"], 0.7629, atol=0.005)
+    np.testing.assert_allclose(cons.loc["good"], 0.8519, atol=0.005)
+    np.testing.assert_allclose(cons.loc["bad"], 0.7653, atol=0.005)
     assert cons.loc["good"] > cons.loc["bad"]
 
 
@@ -252,8 +241,8 @@ def test_income_by_education(simulation_result):
     """Mean income during working life must be higher for high education."""
     working = simulation_result[simulation_result["period"] < retirement_period]
     inc = working.groupby("education")["income"].mean()
-    np.testing.assert_allclose(inc.loc["low"], 1.0395, atol=0.01)
-    np.testing.assert_allclose(inc.loc["high"], 1.9014, atol=0.01)
+    np.testing.assert_allclose(inc.loc["low"], 1.0350, atol=0.01)
+    np.testing.assert_allclose(inc.loc["high"], 1.8568, atol=0.01)
     assert inc.loc["high"] > inc.loc["low"]
 
 
@@ -277,7 +266,7 @@ def test_no_income_after_retirement(simulation_result):
 
 def test_total_alive_rows(simulation_result):
     """Total number of alive-regime rows must match reference."""
-    assert abs(len(simulation_result) - 293992) <= 50
+    assert abs(len(simulation_result) - 293554) <= 50
 
 
 def test_wealth_non_negative(simulation_result):

@@ -158,8 +158,25 @@ def utility(
     effort_cost: FloatND,
     work_disutility: FloatND,
     consumption_utility: FloatND,
+    discount_type: DiscreteState,  # noqa: ARG001
 ) -> FloatND:
+    # `discount_type` is accepted (but unused) so pylcm's state-usage
+    # check sees it as reached from utility. The actual per-period
+    # discount factor is produced by the `discount_factor` DAG function
+    # and consumed by the default Bellman aggregator.
     return consumption_utility - work_disutility - effort_cost - adjustment_cost_penalty
+
+
+def discount_factor(
+    discount_type: DiscreteState,
+    discount_factor_by_type: FloatND,
+) -> FloatND:
+    """Per-period discount factor indexed by `discount_type`.
+
+    Wired as a DAG function on `ALIVE_REGIME.functions`; pylcm's default
+    Bellman aggregator picks the scalar up as a DAG-output H input.
+    """
+    return discount_factor_by_type[discount_type]
 
 
 def work_disutility(
@@ -396,6 +413,7 @@ ALIVE_REGIME = Regime(
         "education": DiscreteGrid(Education),
         "productivity": DiscreteGrid(ProductivityType),
         "health_type": DiscreteGrid(HealthType),
+        "discount_type": DiscreteGrid(DiscountType, batch_size=1),
     },
     state_transitions={
         "wealth": next_wealth,
@@ -404,6 +422,7 @@ ALIVE_REGIME = Regime(
         "education": None,
         "productivity": None,
         "health_type": None,
+        "discount_type": None,
     },
     actions={
         "labor_supply": DiscreteGrid(LaborSupply),
@@ -426,6 +445,11 @@ ALIVE_REGIME = Regime(
         "taxed_income": taxed_income,
         "pension": pension,
         "scaled_productivity_shock": scaled_productivity_shock,
+        # Heterogeneous β: the scalar is produced by indexing
+        # `discount_factor_by_type` by the `discount_type` state, and
+        # pylcm's default Bellman aggregator picks it up as a
+        # DAG-output H argument.
+        "discount_factor": discount_factor,
     },
     constraints={
         "retirement_constraint": retirement_constraint,
@@ -433,10 +457,20 @@ ALIVE_REGIME = Regime(
     },
 )
 
+
+def dead_utility(discount_type: DiscreteState) -> FloatND:  # noqa: ARG001
+    """Dead-regime utility: always zero. `discount_type` is in the
+    signature so pylcm's usage check accepts the state declaration."""
+    return jnp.asarray(0.0)
+
+
 DEAD_REGIME = Regime(
     transition=None,
     active=partial(dead_is_active, initial_age=ages.values[0]),
-    functions={"utility": lambda: 0.0},
+    states={
+        "discount_type": DiscreteGrid(DiscountType, batch_size=1),
+    },
+    functions={"utility": dead_utility},
 )
 
 MAHLER_YUM_MODEL = Model(
@@ -668,16 +702,23 @@ def _compute_pension_base(*, income_process, income_normalization):
 
 
 def create_inputs(*, seed, n_simulation_subjects, params):
-    """Build model params, initial conditions, and discount factors.
+    """Build model params and initial conditions.
+
+    The two-valued discount-factor grid (`mean ± std`) is exposed via
+    `model_params["discount_factor"]["discount_factor_by_type"]`; the
+    `discount_type` state picks the per-subject value at simulate time.
 
     Returns:
-        Tuple of (model_params, initial_conditions_df, discount_types,
-        discount_factor_small, discount_factor_large).
+        Tuple of (model_params, initial_conditions_df).
 
     """
-    discount_factor = params["discount_factor"]
-    discount_factor_small = discount_factor["mean"] - discount_factor["std"]
-    discount_factor_large = discount_factor["mean"] + discount_factor["std"]
+    discount_factor_spec = params["discount_factor"]
+    discount_factor_by_type = jnp.array(
+        [
+            discount_factor_spec["mean"] - discount_factor_spec["std"],
+            discount_factor_spec["mean"] + discount_factor_spec["std"],
+        ]
+    )
 
     income_process = params["income_process"]
     income_norm = _compute_income_normalization(sigx=income_process["sigx"])
@@ -731,6 +772,7 @@ def create_inputs(*, seed, n_simulation_subjects, params):
         "scaled_productivity_shock": {
             "productivity_shock_scale": jnp.sqrt(income_process["sigx"]),
         },
+        "discount_factor": {"discount_factor_by_type": discount_factor_by_type},
     }
 
     td = _build_type_distribution()
@@ -770,6 +812,7 @@ def create_inputs(*, seed, n_simulation_subjects, params):
             "education": td["education"].values[type_indices],
             "productivity": td["productivity"].values[type_indices],
             "health_type": td["health_type"].values[type_indices],
+            "discount_type": td["discount_type"].values[type_indices],
             "productivity_shock": np.asarray(
                 shock_gridpoints[
                     jax.random.choice(
@@ -785,15 +828,8 @@ def create_inputs(*, seed, n_simulation_subjects, params):
             ),
         }
     )
-    discount_types = (td["discount_type"].values[type_indices] == "large").astype(int)
 
-    return (
-        model_params,
-        initial_conditions_df,
-        discount_types,
-        discount_factor_small,
-        discount_factor_large,
-    )
+    return model_params, initial_conditions_df
 
 
 _ADDITIONAL_TARGETS = [
@@ -808,38 +844,22 @@ _ADDITIONAL_TARGETS = [
 
 
 def model_solve_and_simulate(*, params):
-    """Solve and simulate for both discount factor types."""
-    (
-        common_params,
-        initial_conditions_df,
-        discount_types,
-        discount_factor_small,
-        discount_factor_large,
-    ) = create_inputs(seed=32, n_simulation_subjects=10000, params=params)
+    """Solve and simulate the model (one pass, both discount types)."""
+    common_params, initial_conditions_df = create_inputs(
+        seed=32, n_simulation_subjects=10000, params=params
+    )
+    initial_conditions = initial_conditions_from_dataframe(
+        df=initial_conditions_df,
+        regimes=MAHLER_YUM_MODEL.regimes,
+        regime_names_to_ids=MAHLER_YUM_MODEL.regime_names_to_ids,
+    )
 
-    dfs = []
-    for discount_factor, type_id in [
-        (discount_factor_small, 0),
-        (discount_factor_large, 1),
-    ]:
-        mask = discount_types == type_id
-        type_df = initial_conditions_df.loc[mask].reset_index(drop=True)
-        type_initial = initial_conditions_from_dataframe(
-            df=type_df,
-            regimes=MAHLER_YUM_MODEL.regimes,
-            regime_names_to_ids=MAHLER_YUM_MODEL.regime_names_to_ids,
-        )
-
-        result = MAHLER_YUM_MODEL.simulate(
-            params={"alive": {"discount_factor": discount_factor, **common_params}},
-            initial_conditions=type_initial,
-            period_to_regime_to_V_arr=None,
-            seed=42,
-            log_level="off",
-        )
-        df = result.to_dataframe(additional_targets=_ADDITIONAL_TARGETS)
-        df["discount_type"] = type_id
-        dfs.append(df)
-
-    res = pd.concat(dfs, ignore_index=True)
+    result = MAHLER_YUM_MODEL.simulate(
+        params={"alive": common_params},
+        initial_conditions=initial_conditions,
+        period_to_regime_to_V_arr=None,
+        seed=42,
+        log_level="off",
+    )
+    res = result.to_dataframe(additional_targets=_ADDITIONAL_TARGETS)
     return res.loc[res["regime"] == "alive"].copy()

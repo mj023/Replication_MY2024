@@ -408,7 +408,7 @@ ALIVE_REGIME = Regime(
         "education": DiscreteGrid(Education),
         "productivity": DiscreteGrid(ProductivityType),
         "health_type": DiscreteGrid(HealthType),
-        "discount_type": DiscreteGrid(DiscountType, batch_size=1),
+        "discount_type": DiscreteGrid(DiscountType),
     },
     state_transitions={
         "wealth": next_wealth,
@@ -454,8 +454,19 @@ ALIVE_REGIME = Regime(
 
 
 def dead_utility(discount_type: DiscreteState) -> FloatND:  # noqa: ARG001
-    """Dead-regime utility: always zero. `discount_type` is in the
-    signature so pylcm's usage check accepts the state declaration."""
+    """Dead-regime utility: always zero.
+
+    `discount_type` is a fixed state on the alive regime (consumed by
+    `discount_factor`), so V_alive integrates next-period continuation
+    values along a `discount_type` axis. Because `alive` transitions to
+    `dead`, V_dead must carry the same axis — otherwise the lookup of
+    V_dead at the next-period `discount_type` value has nothing to index.
+    pylcm enforces this by requiring every reachable target regime to
+    declare the same fixed states as the source. Hence `discount_type`
+    on `DEAD_REGIME.states` below, and hence `discount_type` in this
+    signature so pylcm's usage check accepts the state declaration even
+    though the value is identically zero.
+    """
     return jnp.asarray(0.0)
 
 
@@ -463,7 +474,10 @@ DEAD_REGIME = Regime(
     transition=None,
     active=partial(dead_is_active, initial_age=ages.values[0]),
     states={
-        "discount_type": DiscreteGrid(DiscountType, batch_size=1),
+        # Mirrors alive's `discount_type` so V_dead is indexable along
+        # the same fixed-state axis the alive→dead transition integrates
+        # over. See `dead_utility` for the full reasoning.
+        "discount_type": DiscreteGrid(DiscountType),
     },
     functions={"utility": dead_utility},
 )

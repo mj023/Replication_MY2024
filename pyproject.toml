@@ -77,7 +77,6 @@ per-file-ignores."src/replication_my/*" = [
 # remove each entry as its module is completed.
 per-file-ignores."src/replication_my/estimation.py" = [ "ANN" ]
 per-file-ignores."src/replication_my/mahler_yum_2024.py" = [ "ANN" ]
-per-file-ignores."src/replication_my/moments.py" = [ "ANN" ]
 per-file-ignores."src/replication_my/plot.py" = [ "ANN" ]
 per-file-ignores."src/replication_my/soep_data.py" = [ "ANN" ]
 per-file-ignores."src/replication_my/stderrors_sens.py" = [ "ANN" ]

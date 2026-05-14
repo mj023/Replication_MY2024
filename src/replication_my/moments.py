@@ -2,6 +2,8 @@
 
 import dataclasses
 import logging
+from collections.abc import Sequence
+from typing import cast
 
 import jax.numpy as jnp
 import numpy as np
@@ -32,7 +34,7 @@ _INTERVAL_LABELS_6 = [*_INTERVAL_LABELS_4, "65-74", "75-84"]
 _INTERVAL_LABELS_10 = ["25-44", "45-64", "65-84"]
 
 
-def _build_moment_index():  # noqa: C901
+def _build_moment_index() -> pd.Index:  # noqa: C901
     """Build the labeled index for the 64 target moments.
 
     The ordering matches the original position arithmetic exactly.
@@ -230,7 +232,7 @@ moment_sd = pd.Series(
 )
 
 
-def _assign_intervals(*, res):
+def _assign_intervals(*, res: pd.DataFrame) -> pd.DataFrame:
     """Add interval columns for groupby aggregation."""
     res["interval_5"] = pd.cut(
         res["period"],
@@ -253,14 +255,20 @@ def _assign_intervals(*, res):
     return res
 
 
-def _fill_grouped_moments(*, moments, grouped, name, keys):
+def _fill_grouped_moments(
+    *,
+    moments: pd.Series,
+    grouped: pd.Series,
+    name: str,
+    keys: Sequence[tuple[str, ...] | str],
+) -> None:
     """Fill moments Series from a groupby result."""
     for key in keys:
         label = (name, *key) if isinstance(key, tuple) else (name, key)
         moments[str(label)] = grouped.loc[key]
 
 
-def simulate_moments(*, params):
+def simulate_moments(*, params: dict) -> pd.Series:
     """Compute 64 target moments from simulated data."""
     res = model_solve_and_simulate(params=params)
     res = _assign_intervals(res=res)
@@ -308,8 +316,9 @@ def simulate_moments(*, params):
         ],
     )
 
-    # Median wealth by (6 intervals)
-    median_wealth = res.groupby("interval_5")["wealth"].median()
+    # Median wealth by (6 intervals). `SeriesGroupBy.median()` on a single
+    # selected column returns a Series; the pandas stubs over-approximate it.
+    median_wealth = cast("pd.Series", res.groupby("interval_5")["wealth"].median())
     _fill_grouped_moments(
         moments=moments,
         grouped=median_wealth,

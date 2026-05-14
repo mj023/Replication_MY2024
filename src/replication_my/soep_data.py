@@ -1,5 +1,6 @@
 import dataclasses
 import os
+from typing import cast
 
 import numpy as np
 import optimagic as om
@@ -13,7 +14,9 @@ WEALTH_NORMALIZATION = 48201
 # Set working directory — update this path for your machine
 path = "/home/mj023/Downloads/Soep/SOEP_V38"
 os.chdir(f"{path}")
-pl = pd.read_stata("pl_clean.dta")
+# `read_stata` returns a `StataReader` only with `iterator`/`chunksize`; the
+# plain call always yields a DataFrame, but the pandas stubs return the union.
+pl = cast("pd.DataFrame", pd.read_stata("pl_clean.dta"))
 gather_frame = []
 
 """ for pl in iter:
@@ -28,8 +31,8 @@ pl = pd.concat(gather_frame) """
 
 
 # Merge with other datasets
-def merge_data(base, filename, suffix):
-    df = pd.read_stata(filename)
+def merge_data(base: pd.DataFrame, filename: str, suffix: str) -> pd.DataFrame:
+    df = cast("pd.DataFrame", pd.read_stata(filename))
     return base.merge(df, on=["pid", "syear"], how="left", suffixes=("", f"_{suffix}"))
 
 
@@ -137,7 +140,7 @@ _HEALTH_FIELDS = [f.name for f in dataclasses.fields(Health)]
 _INTERVAL_LABELS = ["35-44", "45-54", "55-64", "65-74", "75-84"]
 
 
-def simulate_wealth(*, params):
+def simulate_wealth(*, params: dict) -> pd.Series:
     """Compute median wealth by health status and age interval."""
     res = model_solve_and_simulate(params=params)
     res["interval_5"] = pd.cut(

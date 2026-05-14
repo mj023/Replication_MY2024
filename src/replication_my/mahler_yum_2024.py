@@ -224,9 +224,9 @@ def consumption(
 def consumption_utility(
     health: DiscreteState,
     consumption: FloatND,
-    health_consumption_penalty: float,
-    sigma: float,
-    utility_constant: float,
+    health_consumption_penalty: FloatND,
+    sigma: FloatND,
+    utility_constant: FloatND,
 ) -> FloatND:
     mucon = jnp.where(health, 1, health_consumption_penalty)
     return (
@@ -240,7 +240,7 @@ def effort_cost(
     education: DiscreteState,
     health: DiscreteState,
     effort_value: FloatND,
-    effort_elasticity: float,
+    effort_elasticity: FloatND,
     effort_cost_grid: FloatND,
 ) -> FloatND:
     return (
@@ -255,7 +255,7 @@ def net_income(benefits: FloatND, taxed_income: FloatND, pension: FloatND) -> Fl
 
 
 def scaled_productivity_shock(
-    productivity_shock: ContinuousState, productivity_shock_scale: float
+    productivity_shock: ContinuousState, productivity_shock_scale: FloatND
 ) -> FloatND:
     return productivity_shock * productivity_shock_scale
 
@@ -268,7 +268,7 @@ def base_income(
     yt_s: FloatND,
     yt_sq: FloatND,
     wagep: FloatND,
-    income_normalization: float,
+    income_normalization: FloatND,
 ) -> FloatND:
     """Compute base income for a given (period, health, education) combination."""
     yt = (
@@ -316,7 +316,7 @@ def pension(
     education: DiscreteState,
     productivity: DiscreteState,
     pension_base: FloatND,
-    pension_replacement_rate: float,
+    pension_replacement_rate: FloatND,
     productivity_type_multiplier: FloatND,
 ) -> FloatND:
     return jnp.where(
@@ -339,13 +339,13 @@ def next_health(
     lagged_effort_value: FloatND,
     education: DiscreteState,
     health_type: DiscreteState,
-    health_intercept: float,
+    health_intercept: FloatND,
     health_age_effects: FloatND,
-    good_health_coefficient: float,
-    health_type_coefficient: float,
-    college_coefficient: float,
-    health_effort_coefficient: float,
-    lagged_health_effort_coefficient: float,
+    good_health_coefficient: FloatND,
+    health_type_coefficient: FloatND,
+    college_coefficient: FloatND,
+    health_effort_coefficient: FloatND,
+    lagged_health_effort_coefficient: FloatND,
 ) -> FloatND:
     """Compute health transition probabilities via logit model."""
     y = (
@@ -399,7 +399,7 @@ def dead_is_active(age: int, initial_age: float) -> bool:
 
 ALIVE_REGIME = Regime(
     transition=MarkovTransition(next_regime),
-    active=partial(alive_is_active, final_age_alive=ages.values[-2]),
+    active=partial(alive_is_active, final_age_alive=int(ages.values[-2])),
     states={
         "wealth": IrregSpacedGrid(points=_WEALTH_GRID_POINTS),
         "health": DiscreteGrid(Health),
@@ -473,7 +473,7 @@ def dead_utility(discount_type: DiscreteState) -> FloatND:  # noqa: ARG001
 
 DEAD_REGIME = Regime(
     transition=None,
-    active=partial(dead_is_active, initial_age=ages.values[0]),
+    active=partial(dead_is_active, initial_age=int(ages.values[0])),
     states={
         # Mirrors alive's `discount_type` so V_dead is indexable along
         # the same fixed-state axis the alive→dead transition integrates
@@ -567,7 +567,7 @@ START_PARAMS = {
         {"mean": 0.942749393405227, "std": 0.0283688760224992}
     ),
     "effort_elasticity": 1.11497911620865,
-    "utility_constant": 11,
+    "utility_constant": 11.0,
     "health_consumption_penalty": 0.871503495423925,
     "pension_replacement_rate": 0.358766004066242,
 }

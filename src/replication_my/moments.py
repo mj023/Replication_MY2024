@@ -7,14 +7,14 @@ import jax.numpy as jnp
 import numpy as np
 import pandas as pd
 
-from Mahler_Yum_2024 import (
+from replication_my.mahler_yum_2024 import (
     Education,
     Health,
     _wealth_normalization,
     model_solve_and_simulate,
     retirement_period,
 )
-from utils import gini
+from replication_my.utils import gini
 
 _log = logging.getLogger("lcm")
 

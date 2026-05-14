@@ -32,16 +32,16 @@ dependencies = [
 ]
 
 [tool.hatch]
-build.hooks.vcs.version-file = "src/_version.py"
+build.hooks.vcs.version-file = "src/replication_my/_version.py"
 build.targets.sdist.exclude = [ "tests" ]
 build.targets.sdist.only-packages = true
-build.targets.wheel.only-include = [ "src" ]
+build.targets.wheel.only-include = [ "src/replication_my" ]
 build.targets.wheel.sources = [ "src" ]
 metadata.allow-direct-references = true
 version.source = "vcs"
 
 [tool.ruff]
-exclude = [ "src/_version.py" ]
+exclude = [ "src/replication_my/_version.py" ]
 fix = true
 unsafe-fixes = false
 [tool.ruff.lint]
@@ -66,20 +66,20 @@ extend-ignore = [
   "TRY003",  # Long messages outside exception class
   "F722",    # https://docs.kidger.site/jaxtyping/faq/#flake8-or-ruff-are-throwing-an-error
 ]
-per-file-ignores."src/*" = [
+per-file-ignores."src/replication_my/*" = [
   "ANN",     # TEMPORARY: Annotations (replication scripts lack full annotations)
   "E402",    # Module level import not at top of file
-  "INP001",  # Implicit namespace package (src/ layout without __init__.py)
   "PD008",   # Use .loc instead of .at (false positive on JAX .at[])
   "PD011",   # Use .to_numpy() instead of .values (false positive on AgeGrid .values)
   "PLR2004", # Magic values (replication uses numeric constants throughout)
   "T201",    # print found (replication scripts use print)
 ]
-per-file-ignores."src/test_*" = [
+per-file-ignores."tests/test_*" = [
   "ANN",     # Annotations
   "INP001",  # Implicit namespace package
   "PLR2004", # Magic value used in comparison
   "S101",    # Use of assert
+  "T201",    # print found (the __main__ smoke-test block prints progress)
 ]
 pydocstyle.convention = "google"
 
@@ -149,8 +149,8 @@ pytest-cov = "*"
 pytest-xdist = "*"
 ty = "*"
 [tool.pixi.feature.tests.tasks]
-tests = "pytest src/test_run_model.py"
-tests-with-cov = "pytest src/test_run_model.py --cov-report=xml --cov=./"
+tests = "pytest tests/test_run_model.py"
+tests-with-cov = "pytest tests/test_run_model.py --cov-report=xml --cov=src/replication_my"
 ty = "ty check"
 [tool.pixi.pypi-dependencies]
 # Pin dags to the same git rev as pylcm (OpenSourceEconomics/dags#82): its

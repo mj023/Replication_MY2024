@@ -3,7 +3,7 @@ import optimagic as om
 import pandas as pd
 from scipy import linalg
 
-from utils import qreg
+from replication_my.utils import qreg
 
 empirical_moments = np.asarray(
     [

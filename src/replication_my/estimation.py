@@ -4,8 +4,8 @@ import numpy as np
 import optimagic as om
 import pandas as pd
 
-from Mahler_Yum_2024 import START_PARAMS
-from moments import empirical_moments, moment_sd, simulate_moments
+from replication_my.mahler_yum_2024 import START_PARAMS
+from replication_my.moments import empirical_moments, moment_sd, simulate_moments
 
 W_var = np.diag(1 / moment_sd.values**2)
 W_root = np.sqrt(W_var)

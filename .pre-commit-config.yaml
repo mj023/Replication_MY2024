@@ -21,7 +21,7 @@ repos:
       - id: check-ast
       - id: check-case-conflict
       - id: check-docstring-first
-        exclude: src/(plot|soep_data|stderrors_sens)\.py
+        exclude: src/replication_my/(plot|soep_data|stderrors_sens)\.py
       - id: check-merge-conflict
       - id: check-toml
       - id: check-vcs-permalinks

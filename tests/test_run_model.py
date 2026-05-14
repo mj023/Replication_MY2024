@@ -5,7 +5,7 @@ import pandas as pd
 import pytest
 from lcm.pandas_utils import initial_conditions_from_dataframe
 
-from Mahler_Yum_2024 import (
+from replication_my.mahler_yum_2024 import (
     _EFFORT_FIELD_NAMES,
     MAHLER_YUM_MODEL,
     START_PARAMS,
@@ -110,7 +110,7 @@ def test_period_0_policy_matches_old_pylcm():
     )
     df = result.to_dataframe(use_labels=False)
     p0 = df[(df["regime"] == "alive") & (df["period"] == 0)]
-    labor_supply = p0["labor_supply"].values
+    labor_supply = p0["labor_supply"].to_numpy()
 
     # Period-0 labor supply distribution must approximately match old pylcm 167a3a6.
     # Small deviations (1-2 agents) are expected from IrregSpacedGrid float precision.

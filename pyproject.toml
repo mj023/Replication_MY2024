@@ -153,6 +153,13 @@ tests = "pytest src/test_run_model.py"
 tests-with-cov = "pytest src/test_run_model.py --cov-report=xml --cov=./"
 ty = "ty check"
 [tool.pixi.pypi-dependencies]
+# Pin dags to the same git rev as pylcm (OpenSourceEconomics/dags#82): its
+# wrappers advertise the `*args, **kwargs` forwarder shape on `__annotations__`,
+# so beartype's import claw treats them as permissive forwarders. Without this,
+# the regime-transition wrapper keeps a stale `-> FloatND` return annotation and
+# beartype rejects the `mappingproxy` it actually returns. Replace with
+# `dags>=0.6` once released.
+dags = { git = "https://github.com/OpenSourceEconomics/dags.git", rev = "cf59c04" }
 jax = { version = ">=0.4.34", extras = [ "cuda12" ] }
 jaxlib = ">=0.4.34"
 pdbp = "*"

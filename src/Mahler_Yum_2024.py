@@ -28,6 +28,7 @@ from lcm.typing import (
     DiscreteState,
     FloatND,
     Period,
+    ScalarInt,
 )
 from scipy.interpolate import interp1d as scipy_interp1d
 
@@ -57,50 +58,50 @@ _WEALTH_GRID_POINTS = tuple(
 
 @categorical(ordered=True)
 class LaborSupply:
-    retired: int
-    part_time: int
-    full_time: int
+    retired: ScalarInt
+    part_time: ScalarInt
+    full_time: ScalarInt
 
 
 @categorical(ordered=True)
 class Education:
-    low: int
-    high: int
+    low: ScalarInt
+    high: ScalarInt
 
 
 Effort = categorical(ordered=True)(
-    make_dataclass("Effort", [(f"level_{i}", int) for i in range(40)])
+    make_dataclass("Effort", [(f"level_{i}", ScalarInt) for i in range(40)])
 )
 
 
 @categorical(ordered=True)
 class Health:
-    bad: int
-    good: int
+    bad: ScalarInt
+    good: ScalarInt
 
 
 @categorical(ordered=True)
 class ProductivityType:
-    low: int
-    high: int
+    low: ScalarInt
+    high: ScalarInt
 
 
 @categorical(ordered=True)
 class HealthType:
-    low: int
-    high: int
+    low: ScalarInt
+    high: ScalarInt
 
 
 @categorical(ordered=True)
 class DiscountType:
-    small: int
-    large: int
+    small: ScalarInt
+    large: ScalarInt
 
 
 @categorical(ordered=False)
 class RegimeId:
-    alive: int
-    dead: int
+    alive: ScalarInt
+    dead: ScalarInt
 
 
 effort_grid = jnp.linspace(0, 1, 40)

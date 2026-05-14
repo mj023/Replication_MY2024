@@ -1,6 +1,7 @@
 """Replication of Mahler & Yum (2024): Lifestyle Behaviors and Wealth-Health Gaps."""
 
 import dataclasses
+from collections.abc import Mapping, Sequence
 from dataclasses import make_dataclass
 from functools import partial
 from pathlib import Path
@@ -133,7 +134,7 @@ health_type_coefficient = 0.632
 college_coefficient = 0.238
 
 
-def _load_survival_probs():
+def _load_survival_probs() -> pd.Series:
     """Load survival probabilities as labeled Series (age x education x health)."""
     surv_hs = np.loadtxt(_DATA_DIR / "surv_HS.txt")
     surv_cl = np.loadtxt(_DATA_DIR / "surv_CL.txt")
@@ -573,7 +574,9 @@ START_PARAMS = {
 }
 
 
-def _age_keys_to_periods(*, age_keyed_dict):
+def _age_keys_to_periods(
+    *, age_keyed_dict: Mapping[str, float]
+) -> tuple[np.ndarray, np.ndarray]:
     """Convert {"27": val, "41": val, ...} to period-indexed arrays."""
     start_age = int(ages.values[0])
     step = int(ages.values[1] - ages.values[0])
@@ -583,7 +586,12 @@ def _age_keys_to_periods(*, age_keyed_dict):
     return knot_periods, values
 
 
-def _interpolate_knots(*, age_keyed_dict, period_range, flat_after=None):
+def _interpolate_knots(
+    *,
+    age_keyed_dict: Mapping[str, float],
+    period_range: np.ndarray,
+    flat_after: int | None = None,
+) -> np.ndarray:
     """Cubic spline interpolation of age-keyed knots over a period range.
 
     Args:
@@ -600,7 +608,11 @@ def _interpolate_knots(*, age_keyed_dict, period_range, flat_after=None):
     return values
 
 
-def create_work_disutility_grid(*, work_disutility, education_disutility_adjustment):
+def create_work_disutility_grid(
+    *,
+    work_disutility: Mapping[str, Mapping[str, float]],
+    education_disutility_adjustment: float,
+) -> pd.Series:
     """Interpolate work disutility knots to a labeled Series."""
     age_values = np.asarray(ages.values)
     period_range = np.arange(1, retirement_period + 1)
@@ -623,7 +635,9 @@ def create_work_disutility_grid(*, work_disutility, education_disutility_adjustm
     return df.set_index(["age", "education", "health"])["value"]
 
 
-def create_effort_cost_grid(*, effort_cost):
+def create_effort_cost_grid(
+    *, effort_cost: Mapping[str, Mapping[str, Mapping[str, float]]]
+) -> pd.Series:
     """Interpolate effort cost knots to a labeled Series (age x education x health)."""
     age_values = np.asarray(ages.values)
     period_range = np.arange(1, 31)
@@ -646,7 +660,7 @@ def create_effort_cost_grid(*, effort_cost):
     return df.set_index(["age", "education", "health"])["value"]
 
 
-def create_adjustment_cost_envelope(*, adjustment_cost):
+def create_adjustment_cost_envelope(*, adjustment_cost: Sequence[float]) -> pd.Series:
     """Build exponential adjustment cost envelope as a labeled Series (age)."""
     age_values = np.asarray(ages.values)
     t = np.arange(n_periods)
@@ -657,7 +671,7 @@ def create_adjustment_cost_envelope(*, adjustment_cost):
 _EFFORT_FIELD_NAMES = np.array([f.name for f in dataclasses.fields(Effort)])
 
 
-def _build_type_distribution():
+def _build_type_distribution() -> pd.DataFrame:
     """Build initial type distribution as a DataFrame.
 
     Each row is one of 16 types (education x discount x productivity x health_type).
@@ -684,7 +698,7 @@ def _build_type_distribution():
     ).reset_index()
 
 
-def _compute_income_normalization(*, sigx):
+def _compute_income_normalization(*, sigx: float) -> FloatND:
     """Compute the income normalization denominator from shock variance."""
     sdztemp = ((sigx**2.0) / (1.0 - shock_persistence**2.0)) ** 0.5
     return jnp.exp(
@@ -692,7 +706,9 @@ def _compute_income_normalization(*, sigx):
     ) * jnp.exp(((sdztemp**2.0) ** 2.0) / 2.0)
 
 
-def _compute_pension_base(*, income_process, income_normalization):
+def _compute_pension_base(
+    *, income_process: dict, income_normalization: FloatND
+) -> FloatND:
     """Compute base income at retirement age in good health, by education."""
     y1 = income_process["y1"]
     yt_s = income_process["yt_s"]
@@ -711,7 +727,9 @@ def _compute_pension_base(*, income_process, income_normalization):
     return pension_base
 
 
-def create_inputs(*, seed, n_simulation_subjects, params):
+def create_inputs(
+    *, seed: int, n_simulation_subjects: int, params: dict
+) -> tuple[dict, pd.DataFrame]:
     """Build model params and initial conditions.
 
     The two-valued discount-factor grid (`mean ± std`) is exposed via
@@ -853,7 +871,7 @@ _ADDITIONAL_TARGETS = [
 ]
 
 
-def model_solve_and_simulate(*, params):
+def model_solve_and_simulate(*, params: dict) -> pd.DataFrame:
     """Solve and simulate the model (one pass, both discount types)."""
     common_params, initial_conditions_df = create_inputs(
         seed=32, n_simulation_subjects=10000, params=params

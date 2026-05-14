@@ -73,9 +73,8 @@ per-file-ignores."src/replication_my/*" = [
   "PLR2004", # Magic values (replication uses numeric constants throughout)
   "T201",    # print found (replication scripts use print)
 ]
-# TEMPORARY: per-file ANN ignores for modules not yet fully annotated —
-# remove each entry as its module is completed.
-per-file-ignores."src/replication_my/mahler_yum_2024.py" = [ "ANN" ]
+# TEMPORARY: per-file ANN ignore for the one module not yet fully annotated —
+# `plot.py` is a deferred stretch goal (588 lines of plotly figure-building).
 per-file-ignores."src/replication_my/plot.py" = [ "ANN" ]
 per-file-ignores."tests/test_*" = [
   "ANN",     # Annotations

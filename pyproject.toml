@@ -75,7 +75,6 @@ per-file-ignores."src/replication_my/*" = [
 ]
 # TEMPORARY: per-file ANN ignores for modules not yet fully annotated —
 # remove each entry as its module is completed.
-per-file-ignores."src/replication_my/estimation.py" = [ "ANN" ]
 per-file-ignores."src/replication_my/mahler_yum_2024.py" = [ "ANN" ]
 per-file-ignores."src/replication_my/plot.py" = [ "ANN" ]
 per-file-ignores."src/replication_my/soep_data.py" = [ "ANN" ]

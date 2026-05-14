@@ -81,14 +81,14 @@ upper_bounds = {
 }
 
 
-def criterion_func(params):
+def criterion_func(params: dict) -> np.float64:
     sim_moments = simulate_moments(params=params)
     e = (sim_moments - empirical_moments).values
     return e.T @ W_var @ e
 
 
 @om.mark.least_squares
-def criterion_func_sqr(params):
+def criterion_func_sqr(params: dict) -> np.ndarray:
     sim_moments = simulate_moments(params=params)
     e = (sim_moments - empirical_moments).values
     return e @ W_root

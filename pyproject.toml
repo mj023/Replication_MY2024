@@ -67,13 +67,20 @@ extend-ignore = [
   "F722",    # https://docs.kidger.site/jaxtyping/faq/#flake8-or-ruff-are-throwing-an-error
 ]
 per-file-ignores."src/replication_my/*" = [
-  "ANN",     # TEMPORARY: Annotations (replication scripts lack full annotations)
   "E402",    # Module level import not at top of file
   "PD008",   # Use .loc instead of .at (false positive on JAX .at[])
   "PD011",   # Use .to_numpy() instead of .values (false positive on AgeGrid .values)
   "PLR2004", # Magic values (replication uses numeric constants throughout)
   "T201",    # print found (replication scripts use print)
 ]
+# TEMPORARY: per-file ANN ignores for modules not yet fully annotated —
+# remove each entry as its module is completed.
+per-file-ignores."src/replication_my/estimation.py" = [ "ANN" ]
+per-file-ignores."src/replication_my/mahler_yum_2024.py" = [ "ANN" ]
+per-file-ignores."src/replication_my/moments.py" = [ "ANN" ]
+per-file-ignores."src/replication_my/plot.py" = [ "ANN" ]
+per-file-ignores."src/replication_my/soep_data.py" = [ "ANN" ]
+per-file-ignores."src/replication_my/stderrors_sens.py" = [ "ANN" ]
 per-file-ignores."tests/test_*" = [
   "ANN",     # Annotations
   "INP001",  # Implicit namespace package

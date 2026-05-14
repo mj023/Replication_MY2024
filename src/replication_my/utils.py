@@ -1,10 +1,12 @@
+from collections.abc import Mapping
+
 import jax.numpy as jnp
 import numpy as np
+from lcm.typing import FloatND
 from scipy.optimize import linprog
 
 
-def rouwenhorst(rho, sigma_eps, n):
-
+def rouwenhorst(rho: float, sigma_eps: float, n: int) -> tuple[FloatND, FloatND]:
     mu_eps = 0
 
     q = (rho + 1) / 2
@@ -34,7 +36,7 @@ def rouwenhorst(rho, sigma_eps, n):
     return jnp.linspace(mu_eps / (1.0 - rho) - nu, mu_eps / (1.0 - rho) + nu, n), P.T
 
 
-def gini(x):
+def gini(x: FloatND) -> FloatND:
     sorted_x = jnp.sort(x)
     n = len(x)
     cumx = jnp.cumsum(sorted_x, dtype=float)
@@ -42,27 +44,26 @@ def gini(x):
     return (n + 1 - 2 * jnp.sum(cumx) / cumx[-1]) / n
 
 
-def transform_params(params):
+def transform_params(params: Mapping[str, FloatND]) -> dict[str, FloatND]:
     return {name: jnp.log(value + 0.2) for name, value in params.items()}
 
 
-def retransform_params(params):
+def retransform_params(params: Mapping[str, FloatND]) -> dict[str, FloatND]:
     return {name: jnp.exp(value) - 0.2 for name, value in params.items()}
 
 
-def qreg(y, X, tau):
-    """
-    Quantile regression using linear programming.
+def qreg(y: np.ndarray, X: np.ndarray, tau: float) -> np.ndarray:
+    """Quantile regression using linear programming.
 
-    Parameters:
-        y (numpy array): Outcome vector (n,)
-        X (numpy array): Predictor matrix (n, m)
-        tau (float): Quantile level (between 0 and 1)
+    Args:
+        y: Outcome vector, shape `(n,)`.
+        X: Predictor matrix, shape `(n, m)`.
+        tau: Quantile level (between 0 and 1).
 
     Returns:
-        bhat (numpy array): Estimated regression coefficients (m,)
-    """
+        Estimated regression coefficients, shape `(m,)`.
 
+    """
     n, m = X.shape
     print(m)
     # Objective function: tau * u + (1 - tau) * v + 0 * beta

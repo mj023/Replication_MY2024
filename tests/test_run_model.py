@@ -54,7 +54,7 @@ def test_model_solves_and_simulates():
 def simulation_result():
     """Full simulation with START_PARAMS (seed=32, n=10000)."""
     res = model_solve_and_simulate(params=START_PARAMS)
-    return res[res["regime"] == "alive"].copy()
+    return res[res["regime_name"] == "alive"].copy()
 
 
 # --------------- Period-0 policy regression ---------------
@@ -86,7 +86,7 @@ def test_period_0_policy_matches_old_pylcm():
 
     old_ic_df = pd.DataFrame(
         {
-            "regime": "alive",
+            "regime_id": "alive",
             "age": ages.values[0],
             "wealth": np.zeros(10000),
             "health": np.where(old_health == 0, "bad", "good"),
@@ -109,7 +109,7 @@ def test_period_0_policy_matches_old_pylcm():
         log_level="off",
     )
     df = result.to_dataframe(use_labels=False)
-    p0 = df[(df["regime"] == "alive") & (df["period"] == 0)]
+    p0 = df[(df["regime_name"] == "alive") & (df["period"] == 0)]
     labor_supply = p0["labor_supply"].to_numpy()
 
     # Period-0 labor supply distribution must approximately match old pylcm 167a3a6.

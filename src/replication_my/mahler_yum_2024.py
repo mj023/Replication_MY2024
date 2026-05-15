@@ -832,7 +832,7 @@ def create_inputs(
 
     initial_conditions_df = pd.DataFrame(
         {
-            "regime": "alive",
+            "regime_id": "alive",
             "age": ages.values[0],
             "wealth": np.zeros(n_simulation_subjects),
             "health": np.where(health_draw > health_thresholds, "bad", "good"),
@@ -890,4 +890,4 @@ def model_solve_and_simulate(*, params: dict) -> pd.DataFrame:
         log_level="off",
     )
     res = result.to_dataframe(additional_targets=_ADDITIONAL_TARGETS)
-    return res.loc[res["regime"] == "alive"].copy()
+    return res.loc[res["regime_name"] == "alive"].copy()

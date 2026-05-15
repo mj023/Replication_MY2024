@@ -832,7 +832,7 @@ def create_inputs(
 
     initial_conditions_df = pd.DataFrame(
         {
-            "regime_id": "alive",
+            "regime_name": "alive",
             "age": ages.values[0],
             "wealth": np.zeros(n_simulation_subjects),
             "health": np.where(health_draw > health_thresholds, "bad", "good"),

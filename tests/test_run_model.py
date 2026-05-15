@@ -86,7 +86,7 @@ def test_period_0_policy_matches_old_pylcm():
 
     old_ic_df = pd.DataFrame(
         {
-            "regime_id": "alive",
+            "regime_name": "alive",
             "age": ages.values[0],
             "wealth": np.zeros(10000),
             "health": np.where(old_health == 0, "bad", "good"),

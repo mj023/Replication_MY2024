@@ -878,7 +878,7 @@ def model_solve_and_simulate(*, params: dict) -> pd.DataFrame:
     )
     initial_conditions = initial_conditions_from_dataframe(
         df=initial_conditions_df,
-        regimes=MAHLER_YUM_MODEL.regimes,
+        regimes=MAHLER_YUM_MODEL.user_regimes,
         regime_names_to_ids=MAHLER_YUM_MODEL.regime_names_to_ids,
     )
 

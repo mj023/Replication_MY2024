@@ -273,10 +273,10 @@ def simulate_moments(*, params: dict) -> pd.Series:
     res = model_solve_and_simulate(params=params)
     res = _assign_intervals(res=res)
     moments = pd.Series(0.0, index=MOMENT_INDEX)
-
+    res["labor_supply"] = res["labor_supply"].map(_LABOR_INTENSITY).astype("float")
     # Working pct by (health, 4 intervals) — intensive margin
     working = res.groupby(["health", "interval_4"])["labor_supply"].agg(
-        lambda x: x.map(_LABOR_INTENSITY).mean()
+        np.mean
     )
     _fill_grouped_moments(
         moments=moments,
@@ -328,7 +328,7 @@ def simulate_moments(*, params: dict) -> pd.Series:
 
     # Employment ratio (high edu / low edu) — intensive margin
     emp_by_edu = res.groupby("education")["labor_supply"].agg(
-        lambda x: x.map(_LABOR_INTENSITY).mean()
+        np.mean
     )
     moments[str(("employment_ratio",))] = emp_by_edu.loc["high"] / emp_by_edu.loc["low"]
 
@@ -360,7 +360,7 @@ def simulate_moments(*, params: dict) -> pd.Series:
     )
 
     working_mask = (res["period"] < retirement_period) & (
-        res["labor_supply"] != "retired"
+        res["labor_supply"] > 0
     )
     log_earnings = np.log(
         res.loc[working_mask, "income"] * _productivity_type_multiplier_high

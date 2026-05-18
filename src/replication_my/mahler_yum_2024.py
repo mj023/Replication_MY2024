@@ -825,7 +825,7 @@ def create_inputs(
     shock_gridpoints = prod_shock_grid.get_gridpoints()
     stationary_shock_dist = jax.lax.fori_loop(
         0,
-        1000000,
+        200,
         lambda _i, a: a @ prod_shock_grid.get_transition_probs().T,
         jnp.full(5, 1 / 5),
     )
@@ -878,7 +878,7 @@ def model_solve_and_simulate(*, params: dict) -> pd.DataFrame:
     )
     initial_conditions = initial_conditions_from_dataframe(
         df=initial_conditions_df,
-        regimes=MAHLER_YUM_MODEL.user_regimes,
+        user_regimes=MAHLER_YUM_MODEL.user_regimes,
         regime_names_to_ids=MAHLER_YUM_MODEL.regime_names_to_ids,
     )
 

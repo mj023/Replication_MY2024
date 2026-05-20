@@ -1,5 +1,5 @@
-@.ai-instructions/profiles/tier-a.md @.ai-instructions/modules/jax.md
-@.ai-instructions/modules/optimagic.md
+@.ai-instructions/AGENTS.md @.ai-instructions/modules/numpy.md
+@.ai-instructions/modules/jax.md @.ai-instructions/modules/optimagic.md
 
 # Replication of Mahler & Yum (2024)
 

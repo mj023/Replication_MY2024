@@ -22,7 +22,7 @@ _REGRESSION_DIR = Path(__file__).parent.parent / "regression_data"
 def _make_initial_conditions(*, df):
     return initial_conditions_from_dataframe(
         df=df,
-        regimes=MAHLER_YUM_MODEL.user_regimes,
+        user_regimes=MAHLER_YUM_MODEL.user_regimes,
         regime_names_to_ids=MAHLER_YUM_MODEL.regime_names_to_ids,
     )
 

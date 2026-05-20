@@ -8,7 +8,6 @@ from pathlib import Path
 
 import jax
 import jax.numpy as jnp
-import lcm
 import numpy as np
 import pandas as pd
 from lcm import (
@@ -18,6 +17,8 @@ from lcm import (
     MarkovTransition,
     Model,
     Regime,
+    RouwenhorstAR1Process,
+    UniformIIDProcess,
     categorical,
 )
 from lcm.pandas_utils import initial_conditions_from_dataframe
@@ -107,7 +108,7 @@ class RegimeId:
 
 effort_grid = jnp.linspace(0, 1, 40)
 
-prod_shock_grid = lcm.shocks.ar1.Rouwenhorst(
+prod_shock_grid = RouwenhorstAR1Process(
     n_points=5, rho=shock_persistence, mu=0, sigma=1
 )
 
@@ -406,7 +407,7 @@ ALIVE_REGIME = Regime(
         "health": DiscreteGrid(Health),
         "productivity_shock": prod_shock_grid,
         "lagged_effort": DiscreteGrid(Effort),
-        "adjustment_cost": lcm.shocks.iid.Uniform(n_points=5, start=0, stop=1),
+        "adjustment_cost": UniformIIDProcess(n_points=5, start=0, stop=1),
         "education": DiscreteGrid(Education),
         "productivity": DiscreteGrid(ProductivityType),
         "health_type": DiscreteGrid(HealthType),

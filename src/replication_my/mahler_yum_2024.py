@@ -21,7 +21,6 @@ from lcm import (
     UniformIIDProcess,
     categorical,
 )
-from lcm.pandas_utils import initial_conditions_from_dataframe
 from lcm.typing import (
     BoolND,
     ContinuousAction,
@@ -877,15 +876,9 @@ def model_solve_and_simulate(*, params: dict) -> pd.DataFrame:
     common_params, initial_conditions_df = create_inputs(
         seed=32, n_simulation_subjects=10000, params=params
     )
-    initial_conditions = initial_conditions_from_dataframe(
-        df=initial_conditions_df,
-        user_regimes=MAHLER_YUM_MODEL.user_regimes,
-        regime_names_to_ids=MAHLER_YUM_MODEL.regime_names_to_ids,
-    )
-
     result = MAHLER_YUM_MODEL.simulate(
         params={"alive": common_params},
-        initial_conditions=initial_conditions,
+        initial_conditions=initial_conditions_df,
         period_to_regime_to_V_arr=None,
         seed=42,
         log_level="off",

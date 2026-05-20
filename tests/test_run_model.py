@@ -3,7 +3,6 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import pytest
-from lcm.pandas_utils import initial_conditions_from_dataframe
 
 from replication_my.mahler_yum_2024 import (
     _EFFORT_FIELD_NAMES,
@@ -19,23 +18,14 @@ from replication_my.mahler_yum_2024 import (
 _REGRESSION_DIR = Path(__file__).parent.parent / "regression_data"
 
 
-def _make_initial_conditions(*, df):
-    return initial_conditions_from_dataframe(
-        df=df,
-        user_regimes=MAHLER_YUM_MODEL.user_regimes,
-        regime_names_to_ids=MAHLER_YUM_MODEL.regime_names_to_ids,
-    )
-
-
 def test_model_solves_and_simulates():
     """Smoke test: model runs end-to-end with small n."""
     common_params, ic_df = create_inputs(
         seed=0, n_simulation_subjects=4, params=START_PARAMS
     )
-    initial_conditions = _make_initial_conditions(df=ic_df)
     result = MAHLER_YUM_MODEL.simulate(
         params={"alive": common_params},
-        initial_conditions=initial_conditions,
+        initial_conditions=ic_df,
         period_to_regime_to_V_arr=None,
         seed=12345,
         log_level="off",
@@ -100,10 +90,9 @@ def test_period_0_policy_matches_old_pylcm():
         }
     )
 
-    initial_conditions = _make_initial_conditions(df=old_ic_df)
     result = MAHLER_YUM_MODEL.simulate(
         params={"alive": common_params},
-        initial_conditions=initial_conditions,
+        initial_conditions=old_ic_df,
         period_to_regime_to_V_arr=None,
         seed=42,
         log_level="off",

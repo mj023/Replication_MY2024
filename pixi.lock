@@ -5006,12 +5006,11 @@ packages:
   timestamp: 1774796815820
 - pypi: ../pylcm
   name: pylcm
-  version: 0.0.2.dev182+g1a92dffec.d20260514
-  sha256: 2ac3c0e6987658df12a93886cc7ea80b12456826f61aa1720a0c56e8fd828128
+  version: 0.0.2.dev220+g2c54543b0
+  sha256: 66ac58a67df1d2b41faba623ace73777932ae5e2bd9796f72c893ee0e549a77e
   requires_dist:
   - beartype>=0.21
   - cloudpickle>=3.1.2
-  - dags>=0.5.1
   - h5py>=3.12
   - jax>=0.9
   - jaxtyping>=0.3.2
@@ -5299,8 +5298,8 @@ packages:
   timestamp: 1760379115194
 - pypi: ./
   name: replication-my
-  version: 0.1.dev86+g3d81b5b35.d20260514
-  sha256: 75105cc3ab06d8bbe79dee877a5f68be212cd556f16c2b39a5f7c343308eed62
+  version: 0.1.dev92+g005f10c45.d20260514
+  sha256: 6e06d1a3375edb04e8a0ffa33783056221abc5526123029258986923f052c3c2
   requires_dist:
   - dags
   - networkx

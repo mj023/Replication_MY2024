@@ -6,8 +6,9 @@ import numpy as np
 import optimagic as om
 import pandas as pd
 import plotly.graph_objects as go
+from lcm_examples.mahler_yum_2024 import Health
 
-from replication_my.mahler_yum_2024 import Health, model_solve_and_simulate
+from replication_my.simulate import model_solve_and_simulate
 
 WEALTH_NORMALIZATION = 48201
 

@@ -1,13 +1,15 @@
+from pathlib import Path
 import jax
 from jax import numpy as jnp
-from lcm.dispatchers import _base_productmap
+from lcm.utils.dispatchers import productmap
 from utils import rouwenhorst,gini
-from Mahler_Yum_2024 import MAHLER_YUM_MODEL, calc_savingsgrid
+from Mahler_Yum_2024 import MAHLER_YUM_MODEL, calc_savingsgrid, prod_shock_grid, ages, spgrid
 from jax import random
-from interpax import interp1d
+from scipy.interpolate import interp1d as scipy_interp1d
 import numpy as np
 import pandas as pd
-import nvtx
+
+_DATA_DIR = Path(__file__).parent
 
 model = MAHLER_YUM_MODEL
 
@@ -18,7 +20,7 @@ avrgearn = 57706.57
 theta_val = jnp.array([jnp.exp(-0.2898),jnp.exp(0.2898)])
 n = 38
 retirement_age = 19
-taul = 0.128     
+taul = 0.128
 lamda = 1.0 - 0.321
 rho = 0.975
 r = 1.04**2.0
@@ -33,7 +35,7 @@ sigma = 2
 # --------------------------------------------------------------------------------------
 const_healthtr = -0.906
 age_const = jnp.asarray([0.0,-0.289,-0.644,-0.881,-1.138,-1.586,-1.586,-1.586])
-eff_param = jnp.asarray([0.693,0.734])            
+eff_param = jnp.asarray([0.693,0.734])
 eff_sq = 0
 healthy_dummy = 2.311
 htype_dummy = 0.632
@@ -48,8 +50,9 @@ def create_phigrid(nu,nu_e):
     phigrid = jnp.zeros((retirement_age+1, 2,2))
     for i in range(2):
         for j in range(2):
-            temp_grid = jnp.arange(1,retirement_age+2)
-            temp_grid = interp1d(temp_grid,phi_interp_values, nu[j], method='cubic2')
+            interp_points = jnp.arange(1,retirement_age+2)
+            spline = scipy_interp1d(np.asarray(phi_interp_values), np.asarray(nu[j]), kind='cubic')
+            temp_grid = jnp.asarray(spline(interp_points))
             temp_grid = jnp.where(i == 0, temp_grid*jnp.exp(nu_e), temp_grid)
             phigrid = phigrid.at[:,i,j].set(temp_grid)
     return phigrid
@@ -59,8 +62,9 @@ def create_xigrid(xi):
     xigrid = jnp.zeros((n, 2,2))
     for i in range(2):
         for j in range(2):
-            temp_grid = jnp.arange(1,31)
-            temp_grid = interp1d(temp_grid,xi_interp_values, xi[i][j], method='cubic2')
+            interp_points = np.arange(1,31)
+            spline = scipy_interp1d(np.asarray(xi_interp_values), np.asarray(xi[i][j]), kind='cubic')
+            temp_grid = jnp.asarray(spline(interp_points))
             xigrid = xigrid.at[0:30,i,j].set(temp_grid)
             xigrid = xigrid.at[30:n,i,j].set(xi[i][j][3])
     return xigrid
@@ -76,8 +80,9 @@ def create_income_grid(y1_HS,y1_CL,ytHS_s,ytHS_sq,wagep_HS,wagep_CL,ytCL_s,ytCL_
     def calc_base( _period, health, education):
         yt = jnp.where(education==1, (y1_CL*jnp.exp( ytCL_s*(_period) + ytCL_sq*(_period)**2.0 ))*(1.0-wagep_CL*(1-health)),(y1_HS*jnp.exp( ytHS_s*(_period) + ytHS_sq*(_period)**2.0 ))*(1.0-wagep_HS*(1-health)))
         return (yt/(jnp.exp(((jnp.log(theta_val[1])**2.0)**2.0)/2.0 )*jnp.exp( ((sdztemp**2.0)**2.0)/2.0)))
-    mapped = _base_productmap(calc_base, ("_period", "health", "education"))
-    return mapped(j,health,education)
+    variables = ("_period", "health", "education")
+    mapped = productmap(func=calc_base, variables=variables, batch_sizes=dict.fromkeys(variables, 0))
+    return mapped(_period=j, health=health, education=education)
 
 # --------------------------------------------------------------------------------------
 # Create static Grids
@@ -88,9 +93,10 @@ j = jnp.floor_divide(jnp.arange(38), 5)
 def health_trans(period,health,eff,eff_1,edu,ht):
     y = const_healthtr + age_const[period] + edu*college_dummy + health*healthy_dummy + ht*htype_dummy + eff_grid[eff]*eff_param[0] + eff_grid[eff_1]*eff_param[1]
     return jnp.exp(y) / (1.0 + jnp.exp(y))
-mapped_health_trans = _base_productmap(health_trans, ("period","health","eff","eff_1","edu","ht"))
+_health_trans_variables = ("period","health","eff","eff_1","edu","ht")
+mapped_health_trans = productmap(func=health_trans, variables=_health_trans_variables, batch_sizes=dict.fromkeys(_health_trans_variables, 0))
 
-tr2yp_grid = tr2yp_grid.at[:,:,:,:,:,:,1].set(mapped_health_trans(j,jnp.arange(2), jnp.arange(40),jnp.arange(40),jnp.arange(2),jnp.arange(2)))
+tr2yp_grid = tr2yp_grid.at[:,:,:,:,:,:,1].set(mapped_health_trans(period=j, health=jnp.arange(2), eff=jnp.arange(40), eff_1=jnp.arange(40), edu=jnp.arange(2), ht=jnp.arange(2)))
 tr2yp_grid = tr2yp_grid.at[:,:,:,:,:,:,0].set(1.0 - tr2yp_grid[:,:,:,:,:,:,1])
 
 # Utility arrays for initial draws
@@ -103,32 +109,17 @@ for i in range(1,3):
         for k in range(1,3):
             index = (i-1)*2*2 + (j-1)*2 + k - 1
             discount = discount.at[index].set(i-1)
-            prod = prod.at[index].set(j-1)               
+            prod = prod.at[index].set(j-1)
             ht = ht.at[index].set(1-(k-1))
             discount = discount.at[index+8].set(i-1)
-            prod = prod.at[index+8].set(j-1)               
+            prod = prod.at[index+8].set(j-1)
             ht = ht.at[index+8].set(1-(k-1))
             ed = ed.at[index+8].set(1)
-init_distr_2b2t2h = jnp.array(np.loadtxt("init_distr_2b2t2h.txt"))
+init_distr_2b2t2h = jnp.array(np.loadtxt(_DATA_DIR / "init_distr_2b2t2h.txt"))
 initial_dists = jnp.diff(init_distr_2b2t2h[:,0],prepend=0)
 
-surv_HS = jnp.array(np.loadtxt("surv_HS.txt"))
-surv_CL = jnp.array(np.loadtxt("surv_CL.txt"))
-spgrid = jnp.zeros((38,2,2))
-spgrid = spgrid.at[:,0,0].set(surv_HS[:,1])
-spgrid = spgrid.at[:,1,0].set(surv_CL[:,1])
-spgrid = spgrid.at[:,0,1].set(surv_HS[:,0])
-spgrid = spgrid.at[:,1,1].set(surv_CL[:,0])
 
-""" def draw_alive(period, education, health, initial_thresholds_alive):
-    thresholds = jnp.ones(39*20000)
-    thresholds = thresholds.at[20000:].set(spgrid[period,education,health])
-    alive = jnp.where(thresholds > initial_thresholds_alive, 1,0)
-    alive = alive.reshape(39,20000)
-    alive = jnp.cumprod(alive, axis=0)
-    return alive.flatten()[:-20000] """
-
-def create_inputs(seed, nuh_1, nuh_2, nuh_3, nuh_4,nuu_1, nuu_2, nuu_3, nuu_4,xiHSh_1,xiHSh_2,xiHSh_3,xiHSh_4,xiHSu_1,xiHSu_2,xiHSu_3,xiHSu_4,xiCLu_1,xiCLu_2,xiCLu_3,xiCLu_4,xiCLh_1,xiCLh_2,xiCLh_3,xiCLh_4,y1_HS,y1_CL,ytHS_s,ytHS_sq,wagep_HS,wagep_CL,ytCL_s,ytCL_sq, sigx, chi_1,chi_2, psi, nuad, bb, conp, penre, beta_mean, beta_std):
+def create_inputs(seed, n_simulation_subjects, nuh_1, nuh_2, nuh_3, nuh_4,nuu_1, nuu_2, nuu_3, nuu_4,xiHSh_1,xiHSh_2,xiHSh_3,xiHSh_4,xiHSu_1,xiHSu_2,xiHSu_3,xiHSu_4,xiCLu_1,xiCLu_2,xiCLu_3,xiCLu_4,xiCLh_1,xiCLh_2,xiCLh_3,xiCLh_4,y1_HS,y1_CL,ytHS_s,ytHS_sq,wagep_HS,wagep_CL,ytCL_s,ytCL_sq, sigx, chi_1,chi_2, psi, nuad, bb, conp, penre):
     nuh = jnp.array([nuh_1, nuh_2, nuh_3, nuh_4])
     nuu = jnp.array([nuu_1, nuu_2, nuu_3, nuu_4])
     nu = [nuu, nuh]
@@ -152,26 +143,23 @@ def create_inputs(seed, nuh_1, nuh_2, nuh_3, nuh_4,nuu_1, nuu_2, nuu_3, nuu_4,xi
     print(xi)
     income_grid = create_income_grid(y1_HS,y1_CL,ytHS_s,ytHS_sq,wagep_HS,wagep_CL,ytCL_s,ytCL_sq, sigx)
     chimax_grid = create_chimaxgrid(chi_1,chi_2)
-    xvalues, xtrans = rouwenhorst(rho, jnp.sqrt(sigx), 5)
+    xvalues = prod_shock_grid.get_gridpoints()
+    xtrans = prod_shock_grid.get_transition_probs()
     prod_dist = jax.lax.fori_loop(0,1000000, lambda i,a: a @ xtrans.T, jnp.full(5,1/5))
     xi_grid = create_xigrid(xi)
     phi_grid = create_phigrid(nu, nuad)
     params = {
-    "beta": 1,
-    "spgrid": spgrid,
     "disutil": {"phigrid": phi_grid},
     "fcost" : {"psi": psi, "xigrid":xi_grid},
     "cons_util": {"sigma": sigma, "bb": bb, "kappa" : conp},
-    "utility": { "beta_mean": beta_mean, "beta_std": beta_std},
-    "income": {"income_grid": income_grid, "xvalues" : xvalues},
+    "income": {"income_grid": income_grid},
     "pension": {"income_grid": income_grid, "penre":penre},
-    "adj_cost": {"chimaxgrid": chimax_grid},
-    "shocks":{
-        "alive__next_productivity_shock": xtrans.T,
-        "alive__next_health": tr2yp_grid,
-        "alive__next_adjustment_cost": jnp.full((5, 5), 1/5),
-    }}
-    n = 10000
+    "scaled_adjustment_cost": {"chimaxgrid": chimax_grid},
+    "scaled_productivity_shock": {"sigx": jnp.sqrt(sigx)},
+    "next_health": {"probs_array": tr2yp_grid},
+    "next_regime": {"probs_array": spgrid},
+    }
+    n = n_simulation_subjects
     eff_grid = jnp.linspace(0,1,40)
     key = random.key(seed)
     initial_wealth = jnp.full((n), 0, dtype=jnp.int8)
@@ -185,34 +173,62 @@ def create_inputs(seed, nuh_1, nuh_2, nuh_3, nuh_4,nuu_1, nuu_2, nuu_3, nuu_4,xi
     initial_productivity = prod[types]
     initial_discount = discount[types]
     initial_effort = jnp.searchsorted(eff_grid,init_distr_2b2t2h[:,2][types])
-    initial_adjustment_cost = random.choice(new_keys[1], jnp.arange(5), (n,))
-    initial_productivity_shock = random.choice(new_keys[2], jnp.arange(5), (n,), p = prod_dist)
-    initial_states = {"alive":{"wealth": initial_wealth, "health": initial_health, "health_type": initial_health_type, "effort_t_1": initial_effort, 
+    initial_adjustment_cost = random.uniform(new_keys[1], (n,))
+    initial_productivity_shock = xvalues[random.choice(new_keys[2], jnp.arange(5), (n,), p = prod_dist)]
+    initial_states = {
+                    "age": jnp.full(n, ages.values[0]),
+                    "wealth": initial_wealth, "health": initial_health, "health_type": initial_health_type, "effort_t_1": initial_effort,
                     "productivity_shock": initial_productivity_shock, "adjustment_cost": initial_adjustment_cost,
-                    "education": initial_education, "productivity": initial_productivity, "discount_factor": initial_discount}, "dead":{"dead": jnp.full(n, 0)}
+                    "education": initial_education, "productivity": initial_productivity,
                     }
-    
-    return params, initial_states
 
-jitted_create_inputs = jax.jit(create_inputs)
+    return params, initial_states, initial_discount
+
 
 def model_solve_and_simulate(params):
     seed = 32
-    initial_regimes = ["alive"]*10000
-    params, initial_states = create_inputs(seed, **params)
-    print(params["fcost"]["xigrid"])
-    with nvtx.annotate('solve', color='green'):
-        vf_arr = model.solve(params= {"alive": params, "dead": params})
-    with nvtx.annotate('simulate', color='green'):
-        res = model.simulate(params= {"alive": params, "dead": params},initial_states=initial_states,initial_regimes=initial_regimes, additional_targets={"alive":["utility","fcost","pension","income","cnow"]}, V_arr_dict= vf_arr, seed=42)
-    return res
+    n_subjects = 10000
+    start_params_without_beta = {k: v for k, v in params.items() if k not in ('beta_mean', 'beta_std')}
+    common_params, initial_states, discount_factor_type = create_inputs(seed, n_simulation_subjects=n_subjects, **start_params_without_beta)
+
+    beta_mean = params['beta_mean']
+    beta_std = params['beta_std']
+
+    # Two-solve approach: simulate separately for each discount type, combine.
+    # Replaces old approach where discount_factor was a state variable with
+    # manual beta^period discounting. Mathematically equivalent.
+    dfs = []
+    for beta_val, type_id in [(beta_mean - beta_std, 0), (beta_mean + beta_std, 1)]:
+        mask = discount_factor_type == type_id
+        n_type = int(mask.sum())
+        type_initial = {k: v[mask] for k, v in initial_states.items()}
+        type_initial["regime"] = jnp.full(n_type, model.regime_names_to_ids["alive"], dtype=jnp.int32)
+
+        result = model.simulate(
+            params={"alive": {"discount_factor": beta_val, **common_params}},
+            initial_conditions=type_initial,
+            period_to_regime_to_V_arr=None,
+            seed=42,
+            log_level="off",
+        )
+        df = result.to_dataframe(
+            additional_targets=["utility","fcost","pension","income","cnow"],
+            use_labels=False,
+        )
+        df["discount_type"] = type_id
+        dfs.append(df)
+
+    return pd.concat(dfs, ignore_index=True)
+
 
 def simulate_moments(params):
 
-    res = model_solve_and_simulate(params)["alive"]
+    res = model_solve_and_simulate(params)
+    # Filter to alive regime only (regime column is always string names)
+    res = res[res["regime"] == "alive"].copy()
     moments = np.zeros(64)
-    res['effort'] = np.asarray(eff_grid[res['effort'].to_numpy()])
-    res['effort_t_1'] = np.asarray(eff_grid[res['effort_t_1'].to_numpy()])
+    res['effort'] = np.asarray(eff_grid[res['effort'].to_numpy().astype(int)])
+    res['effort_t_1'] = np.asarray(eff_grid[res['effort_t_1'].to_numpy().astype(int)])
     res['wealth'] = np.asarray(calc_savingsgrid(res['wealth'].to_numpy()))
     res['saving'] = np.asarray(calc_savingsgrid(res['saving'].to_numpy()))
     for health in range(2):
@@ -238,9 +254,8 @@ def simulate_moments(params):
         moments[interval+39] = non_adjusters.iloc[0]
     avg_kappa = ((res.loc[(res['health']==1) ].count()) + (res.loc[(res['health']==0) ].count())*params['conp'])/(len(res))
     avg_cons = res['cnow'].mean()
-    res.loc[res['discount_factor']==0, 'discount_factor'] == -1
-    corrected_util = res['utility']/((params['beta_mean']+(params['beta_std']*res['discount_factor']))**res['period'])
-    avg_utility = corrected_util.mean()
+    # In the new two-solve approach, utility is flow utility (no beta^period factor)
+    avg_utility = res['utility'].mean()
     vsly = avg_utility / avg_kappa.iloc[0]*(avg_cons**-2)
     moments[42] = vsly
     std_effort = res['effort'].std()
@@ -254,19 +269,4 @@ def simulate_moments(params):
     avg_income = (res.loc[ (res['period'] < retirement_age + 1), 'income'].sum()/ res.loc[ (res['period'] < retirement_age+1), 'income'].count())
     moments[63] = (pension_avg/avg_income)
     print(moments)
-    return moments
-
-def simulate_wealth(params):
-
-    res = model_solve_and_simulate(**params)
-    moments = np.zeros(10)
-    res['effort'] = np.asarray(eff_grid[res['effort'].to_numpy()])
-    res['effort_t_1'] = np.asarray(eff_grid[res['effort_t_1'].to_numpy()])
-    res['wealth'] = np.asarray(calc_savingsgrid(res['wealth'].to_numpy()))
-    res['saving'] = np.asarray(calc_savingsgrid(res['saving'].to_numpy()))
-    for interval in range(1,6):
-        median_wealth_10y_h = res.loc[(res['period'] >= (interval*5)) & (res['period'] < ((interval+1)*5)) & (res['health'] == 1), ["wealth"]].median()
-        median_wealth_10y_uh = res.loc[(res['period'] >= (interval*5)) & (res['period'] < ((interval+1)*5)) & (res['health'] == 0), ["wealth"]].median()
-        moments[interval-1] =median_wealth_10y_h
-        moments[interval-1+5] =median_wealth_10y_uh
     return moments

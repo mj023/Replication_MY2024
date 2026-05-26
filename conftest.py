@@ -7,8 +7,13 @@ under `src/replication_my/` would run `replication_my/__init__.py` first, too
 late for the claw to instrument it.
 """
 
+import jax
 from beartype import BeartypeConf
 from beartype.claw import beartype_packages
+
+# The Mahler & Yum model is float32-unstable: its large state space accumulates
+# ~1e-3 errors under XLA's float32 fused kernels. Run at float64, matching pylcm.
+jax.config.update("jax_enable_x64", val=True)
 
 # `is_pep484_tower=True`: let `int` satisfy `float`-annotated slots, matching the
 # implicit numeric conversions the replication relies on. Default `O1` strategy:

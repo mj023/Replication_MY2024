@@ -151,21 +151,17 @@ pytest-cov = "*"
 pytest-xdist = "*"
 ty = "*"
 [tool.pixi.feature.tests.tasks]
-tests = "pytest tests/test_run_model.py"
-tests-with-cov = "pytest tests/test_run_model.py --cov-report=xml --cov=src/replication_my"
+tests = "pytest tests"
+tests-with-cov = "pytest tests --cov-report=xml --cov=src/replication_my"
 ty = "ty check"
 [tool.pixi.pypi-dependencies]
-# Pin dags to the same git rev as pylcm (OpenSourceEconomics/dags#82): its
-# wrappers advertise the `*args, **kwargs` forwarder shape on `__annotations__`,
-# so beartype's import claw treats them as permissive forwarders. Without this,
-# the regime-transition wrapper keeps a stale `-> FloatND` return annotation and
-# beartype rejects the `mappingproxy` it actually returns. Replace with
-# `dags>=0.6` once released.
-dags = { git = "https://github.com/OpenSourceEconomics/dags.git", rev = "cf59c04" }
-jax = { version = ">=0.4.34", extras = [ "cuda12" ] }
-jaxlib = ">=0.4.34"
+# Track dags `main` (matching pylcm) until `dags >= 0.6.0` is released — its
+# `*args, **kwargs` forwarder signatures are needed for pylcm's beartype claw.
+dags = { git = "https://github.com/OpenSourceEconomics/dags.git", branch = "main" }
+jax = { version = ">=0.10", extras = [ "cuda12" ] }
+jaxlib = ">=0.10"
 pdbp = "*"
-pylcm = { path = "../pylcm", editable = true }
+pylcm = { git = "https://github.com/OpenSourceEconomics/pylcm.git", branch = "main" }
 replication-my = { path = ".", editable = true }
 statadict = "*"
 [tool.pixi.workspace]

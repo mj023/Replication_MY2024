@@ -8,14 +8,14 @@ from typing import cast
 import jax.numpy as jnp
 import numpy as np
 import pandas as pd
-
-from replication_my.mahler_yum_2024 import (
+from lcm_examples.mahler_yum_2024 import (
     Education,
     Health,
-    _wealth_normalization,
-    model_solve_and_simulate,
     retirement_period,
+    wealth_normalization,
 )
+
+from replication_my.simulate import model_solve_and_simulate
 from replication_my.utils import gini
 
 _log = logging.getLogger("lcm")
@@ -301,7 +301,7 @@ def simulate_moments(*, params: dict) -> pd.Series:
 
     # Avg income by (education, health, 4 intervals), scaled
     avg_income = res.groupby(["education", "health", "interval_4"])["income"].mean()
-    avg_income = avg_income * _wealth_normalization[1] / 1000
+    avg_income = avg_income * wealth_normalization[1] / 1000
     _fill_grouped_moments(
         moments=moments,
         grouped=avg_income,
